@@ -1,0 +1,37 @@
+{
+  "name": "llm-popularity-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^4.6.2",
+    "@fingerprintjs/fingerprintjs-pro-react": "^2.7.0",
+    "autoprefixer": "^10.4.21",
+    "axios": "^1.11.0",
+    "cookies-next": "^6.1.0",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.542.0",
+    "next": "15.5.2",
+    "postcss": "^8.5.6",
+    "pusher": "^5.2.0",
+    "pusher-js": "^8.4.0",
+    "rate-limiter-flexible": "^7.2.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "recharts": "^3.1.2",
+    "sonner": "^2.0.7",
+    "swr": "^2.3.6",
+    "tailwindcss": "^3.4.17",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.2"
+  }
+}
