@@ -64,7 +64,7 @@ export async function GET(request) {
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\api\stats\route.js
 import { NextResponse } from 'next/server';
 import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
-import { apiMiddleware, securityHeaders } from '@/lib/middleware';
+import { apiMiddleware, securityHeaders, logResponse } from '@/lib/middleware';
 import logger from '@/lib/logger';
 
 export async function GET(request) {
@@ -87,7 +87,7 @@ export async function GET(request) {
     const stats = await voteManager.getStats();
     const rankings = await voteManager.getRankings();
     
-    logger.logResponse(requestInfo, { status: 200 });
+    logResponse(requestInfo, { status: 200 });
     
     return NextResponse.json(
       {
@@ -101,7 +101,7 @@ export async function GET(request) {
     );
   } catch (error) {
     logger.error('Stats error:', error);
-    logger.logResponse(requestInfo, { status: 500 }, error);
+    logResponse(requestInfo, { status: 500 }, error);
     
     return NextResponse.json(
       { error: 'Failed to get stats' },
@@ -116,7 +116,7 @@ export async function GET(request) {
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\api\vote\route.js
 import { NextResponse } from 'next/server';
 import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
-import { apiMiddleware, schemas, detectFraud, securityHeaders } from '@/lib/middleware';
+import { apiMiddleware, schemas, detectFraud, securityHeaders, logResponse } from '@/lib/middleware';
 import logger from '@/lib/logger';
 
 export async function POST(request) {
@@ -173,7 +173,7 @@ export async function POST(request) {
     }
     
     // Log successful vote
-    logger.logResponse(requestInfo, { status: 200 });
+    logResponse(requestInfo, { status: 200 });
     
     return NextResponse.json(
       {
@@ -189,7 +189,7 @@ export async function POST(request) {
     );
   } catch (error) {
     logger.error('Vote error:', error);
-    logger.logResponse(requestInfo, { status: 500 }, error);
+    logResponse(requestInfo, { status: 500 }, error);
     
     return NextResponse.json(
       { error: 'Failed to process vote' },
@@ -253,7 +253,7 @@ export async function GET(request) {
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\api\vote\sync\route.js
 import { NextResponse } from 'next/server';
 import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
-import { apiMiddleware, schemas, securityHeaders } from '@/lib/middleware';
+import { apiMiddleware, schemas, securityHeaders, logResponse } from '@/lib/middleware';
 import logger from '@/lib/logger';
 
 export async function POST(request) {
@@ -278,7 +278,7 @@ export async function POST(request) {
     const voteManager = await getAdaptedVoteManager();
     const syncData = await voteManager.syncUserVotes(fingerprint);
     
-    logger.logResponse(requestInfo, { status: 200 });
+    logResponse(requestInfo, { status: 200 });
     
     return NextResponse.json(
       syncData,
@@ -288,7 +288,7 @@ export async function POST(request) {
     );
   } catch (error) {
     logger.error('Sync votes error:', error);
-    logger.logResponse(requestInfo, { status: 500 }, error);
+    logResponse(requestInfo, { status: 500 }, error);
     
     return NextResponse.json(
       { error: 'Failed to sync votes' },
@@ -407,7 +407,15 @@ export default function Home() {
   
   useEffect(() => {
     initializeVotes();
-    // Removed automatic polling - only update on page load/refresh
+    
+    // Set up polling for real-time updates (every 5 seconds)
+    const pollInterval = setInterval(() => {
+      // Silently sync with server to get latest votes
+      useVoteStore.getState().syncWithServer();
+    }, 5000); // Poll every 5 seconds for better real-time experience
+    
+    // Clean up on unmount
+    return () => clearInterval(pollInterval);
   }, [initializeVotes]);
   
   // Filter LLMs but maintain stable ordering
@@ -596,7 +604,7 @@ export default function Header() {
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
+import { ChevronUp, ChevronDown, TrendingUp, X } from 'lucide-react';
 import useVoteStore from '@/store/useVoteStore';
 import { toast } from 'sonner';
 
@@ -610,14 +618,28 @@ export default function LLMCard({ llm, index }) {
   const rank = getRank(llm.id);
   
   const handleVote = async (voteType) => {
-    if (userVote === voteType) {
-      // Remove vote if clicking the same button
+    console.log('🎯 [CARD] Vote button clicked:', { 
+      llm: llm.name, 
+      llmId: llm.id, 
+      voteType, 
+      currentUserVote: userVote,
+      currentVoteCount: voteCount 
+    });
+    
+    if (voteType === 0) {
+      // Clear vote
+      console.log('🎯 [CARD] Clearing vote for', llm.name);
       await vote(llm.id, 0);
       toast.success('Vote removed');
-    } else {
+    } else if (userVote !== voteType) {
+      // Only vote if it's different from current vote
+      console.log('🎯 [CARD] Casting new vote for', llm.name, ':', voteType === 1 ? 'UPVOTE' : 'DOWNVOTE');
       await vote(llm.id, voteType);
       toast.success(voteType === 1 ? 'Upvoted!' : 'Downvoted!');
+    } else {
+      console.log('🎯 [CARD] Same vote clicked, ignoring:', { llm: llm.name, voteType });
     }
+    // If clicking the same vote button, do nothing (no toggle)
   };
   
   return (
@@ -677,38 +699,62 @@ export default function LLMCard({ llm, index }) {
       {/* Vote Section */}
       <div className="flex items-center justify-between bg-black/20 backdrop-blur-sm rounded-lg p-3">
         <motion.button
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.05 }}
+          whileTap={userVote !== 1 ? { scale: 0.95 } : {}}
+          whileHover={userVote !== 1 ? { scale: 1.05 } : {}}
           onClick={() => handleVote(1)}
+          disabled={userVote === 1}
           className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all shadow-md ${
             userVote === 1
-              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-green-500/30'
-              : 'bg-white/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 border border-green-400/30'
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-green-500/30 cursor-default opacity-100'
+              : 'bg-white/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 border border-green-400/30 cursor-pointer'
           }`}
           aria-label="Upvote"
+          title={userVote === 1 ? "You upvoted this" : "Upvote"}
         >
           <ChevronUp size={20} strokeWidth={2.5} />
         </motion.button>
         
-        <div className="flex flex-col items-center px-4">
-          <span className={`text-xl font-bold ${
-            voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-400'
-          }`}>
-            {voteCount > 0 ? '+' : ''}{voteCount}
-          </span>
-          <span className="text-xs text-muted-foreground/60">votes</span>
+        <div className="flex items-center gap-2">
+          {/* Vote count */}
+          <div className="flex flex-col items-center">
+            <span className={`text-xl font-bold ${
+              voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-400'
+            }`}>
+              {voteCount > 0 ? '+' : ''}{voteCount}
+            </span>
+            <span className="text-xs text-muted-foreground/60">votes</span>
+          </div>
+          
+          {/* Clear vote button - only show if user has voted */}
+          {userVote !== 0 && (
+            <motion.button
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.1 }}
+              onClick={() => handleVote(0)}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white border border-gray-400/30 transition-all"
+              aria-label="Clear vote"
+              title="Clear vote"
+            >
+              <X size={16} strokeWidth={2.5} />
+            </motion.button>
+          )}
         </div>
         
         <motion.button
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.05 }}
+          whileTap={userVote !== -1 ? { scale: 0.95 } : {}}
+          whileHover={userVote !== -1 ? { scale: 1.05 } : {}}
           onClick={() => handleVote(-1)}
+          disabled={userVote === -1}
           className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all shadow-md ${
             userVote === -1
-              ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-red-500/30'
-              : 'bg-white/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-400/30'
+              ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-red-500/30 cursor-default opacity-100'
+              : 'bg-white/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-400/30 cursor-pointer'
           }`}
           aria-label="Downvote"
+          title={userVote === -1 ? "You downvoted this" : "Downvote"}
         >
           <ChevronDown size={20} strokeWidth={2.5} />
         </motion.button>
@@ -910,288 +956,6 @@ export default function VoteChart() {
       </ResponsiveContainer>
     </motion.div>
   );
-}
-
-// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\data\votes.json
-{
-  "votes": {
-    "gpt-4o": 1,
-    "claude-3-5-sonnet": 1,
-    "gemini-ultra": -1,
-    "llama-3-70b": -1,
-    "mistral-large": -1,
-    "command-r-plus": 1,
-    "grok": 1,
-    "perplexity": -1,
-    "qwen-2-5": -1,
-    "deepseek-coder": 1,
-    "phi-3": -1,
-    "falcon-180b": -1,
-    "vicuna-33b": -1,
-    "solar-10-7b": -1,
-    "yi-34b": -1,
-    "mixtral-8x7b": -1,
-    "bard": -1,
-    "ernie-4": 1,
-    "stablelm-2": -1,
-    "inflection-2-5": -1
-  },
-  "userSessions": {
-    "89f160926a37777b575ad591196385dd": {
-      "claude-3-5-sonnet": 1,
-      "gemini-ultra": -1,
-      "llama-3-70b": -1,
-      "mistral-large": -1,
-      "grok": 1,
-      "perplexity": -1,
-      "qwen-2-5": -1,
-      "deepseek-coder": 1,
-      "phi-3": -1,
-      "falcon-180b": -1,
-      "vicuna-33b": -1,
-      "solar-10-7b": -1,
-      "yi-34b": -1,
-      "mixtral-8x7b": -1,
-      "bard": -1,
-      "ernie-4": 1,
-      "stablelm-2": -1,
-      "inflection-2-5": -1,
-      "command-r-plus": 1,
-      "gpt-4o": 1
-    }
-  },
-  "stats": {
-    "totalVotes": 39,
-    "lastHourVotes": [
-      {
-        "llmId": "gpt-4o",
-        "voteType": 1,
-        "timestamp": "2025-08-26T23:50:17.390Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 0,
-        "timestamp": "2025-08-26T23:50:18.430Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 1,
-        "timestamp": "2025-08-26T23:50:19.154Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 0,
-        "timestamp": "2025-08-26T23:50:19.776Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 1,
-        "timestamp": "2025-08-26T23:50:21.309Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:24.707Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:25.431Z"
-      },
-      {
-        "llmId": "gemini-ultra",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:26.060Z"
-      },
-      {
-        "llmId": "llama-3-70b",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:26.734Z"
-      },
-      {
-        "llmId": "mistral-large",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:27.322Z"
-      },
-      {
-        "llmId": "command-r-plus",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:27.861Z"
-      },
-      {
-        "llmId": "grok",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:28.382Z"
-      },
-      {
-        "llmId": "perplexity",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:29.269Z"
-      },
-      {
-        "llmId": "qwen-2-5",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:29.899Z"
-      },
-      {
-        "llmId": "deepseek-coder",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:30.371Z"
-      },
-      {
-        "llmId": "phi-3",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:30.577Z"
-      },
-      {
-        "llmId": "falcon-180b",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:30.757Z"
-      },
-      {
-        "llmId": "vicuna-33b",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:31.098Z"
-      },
-      {
-        "llmId": "solar-10-7b",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:31.279Z"
-      },
-      {
-        "llmId": "yi-34b",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:31.472Z"
-      },
-      {
-        "llmId": "mixtral-8x7b",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:35.524Z"
-      },
-      {
-        "llmId": "bard",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:36.271Z"
-      },
-      {
-        "llmId": "ernie-4",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:36.802Z"
-      },
-      {
-        "llmId": "stablelm-2",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:38.234Z"
-      },
-      {
-        "llmId": "inflection-2-5",
-        "voteType": -1,
-        "timestamp": "2025-08-26T23:50:38.910Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 1,
-        "timestamp": "2025-08-26T23:50:52.917Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 0,
-        "timestamp": "2025-08-26T23:50:53.560Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 1,
-        "timestamp": "2025-08-26T23:50:54.614Z"
-      },
-      {
-        "llmId": "grok",
-        "voteType": 1,
-        "timestamp": "2025-08-26T23:50:56.529Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:11:53.770Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": -1,
-        "timestamp": "2025-08-27T00:11:56.831Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:11:59.213Z"
-      },
-      {
-        "llmId": "command-r-plus",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:12:01.233Z"
-      },
-      {
-        "llmId": "command-r-plus",
-        "voteType": 0,
-        "timestamp": "2025-08-27T00:12:03.173Z"
-      },
-      {
-        "llmId": "command-r-plus",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:12:04.434Z"
-      },
-      {
-        "llmId": "deepseek-coder",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:12:16.846Z"
-      },
-      {
-        "llmId": "ernie-4",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:12:20.762Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": -1,
-        "timestamp": "2025-08-27T00:12:28.735Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:12:30.032Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": -1,
-        "timestamp": "2025-08-27T00:12:53.558Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 0,
-        "timestamp": "2025-08-27T00:14:15.370Z"
-      },
-      {
-        "llmId": "gpt-4o",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:14:16.932Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": -1,
-        "timestamp": "2025-08-27T00:14:19.561Z"
-      },
-      {
-        "llmId": "claude-3-5-sonnet",
-        "voteType": 1,
-        "timestamp": "2025-08-27T00:14:22.294Z"
-      }
-    ],
-    "dailyVotes": [
-      [
-        "Wed Aug 27 2025",
-        44
-      ]
-    ]
-  },
-  "lastUpdated": "2025-08-27T00:14:22.294Z"
 }
 
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\cache.js
@@ -1537,10 +1301,10 @@ export default cacheManager;
 // Falls back to file-based storage if database is not configured
 
 const config = {
-  // Database configuration
+  // Database configuration - always enabled for production
   database: {
-    enabled: process.env.POSTGRES_HOST && process.env.POSTGRES_HOST !== 'localhost',
-    host: process.env.POSTGRES_HOST || 'localhost',
+    enabled: true, // Database is required, no fallback
+    host: process.env.POSTGRES_HOST || 'postgres',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     database: process.env.POSTGRES_DB || 'llm_tracker',
     user: process.env.POSTGRES_USER || 'postgres',
@@ -1548,10 +1312,10 @@ const config = {
     url: process.env.DATABASE_URL,
   },
   
-  // Redis configuration
+  // Redis configuration - always enabled for production
   redis: {
-    enabled: process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost',
-    host: process.env.REDIS_HOST || 'localhost',
+    enabled: true, // Redis is required for caching and real-time updates
+    host: process.env.REDIS_HOST || 'redis',
     port: parseInt(process.env.REDIS_PORT || '6379'),
     password: process.env.REDIS_PASSWORD || undefined,
     url: process.env.REDIS_URL,
@@ -1580,25 +1344,24 @@ const config = {
   
   // Feature flags
   features: {
-    analytics: process.env.ENABLE_ANALYTICS === 'true',
-    realTime: process.env.ENABLE_REAL_TIME === 'true',
-    useDatabase: false, // Will be determined below
+    analytics: process.env.ENABLE_ANALYTICS !== 'false', // Default to true
+    realTime: process.env.ENABLE_REAL_TIME !== 'false', // Default to true for real-time updates
+    useDatabase: true, // Always use database, no fallback to file storage
   },
 };
 
-// Determine if we should use database or file storage
-// Use database only if both PostgreSQL and Redis are properly configured
-config.features.useDatabase = !!(
-  (config.database.enabled || config.database.url) &&
-  (config.redis.enabled || config.redis.url)
-);
+// Database and Redis are mandatory - no fallback to file storage
+// This ensures the system can handle 500k+ users with proper scaling
+config.features.useDatabase = true;
 
 // Log configuration status (without sensitive data)
 if (typeof window === 'undefined') { // Only on server side
   console.log('Configuration loaded:', {
     environment: config.app.env,
-    databaseEnabled: config.features.useDatabase,
-    redisEnabled: config.redis.enabled,
+    databaseEnabled: true, // Always enabled
+    redisEnabled: true, // Always enabled
+    postgresHost: config.database.host,
+    redisHost: config.redis.host,
     features: config.features,
   });
 }
@@ -2198,8 +1961,7 @@ const createChildLogger = (module) => {
 };
 
 // Export logger with additional methods
-const enhancedLogger = {
-  ...logger,
+const enhancedLogger = Object.assign(logger, {
   child: createChildLogger,
   
   // Request logging middleware
@@ -2311,7 +2073,7 @@ const enhancedLogger = {
       }, 'Fraudulent vote detected');
     }
   }
-};
+});
 
 export default enhancedLogger;
 
@@ -3066,354 +2828,314 @@ export default getVoteManager();
 import config from './config.js';
 import logger from './logger.js';
 
-// This wrapper intelligently chooses between database and file-based vote manager
-// based on configuration and availability
+// This wrapper now exclusively uses the database vote manager
+// No fallback to file storage - designed for 500k+ users
 
 let voteManager;
-let isUsingDatabase = false;
 
 export async function getVoteManager() {
   if (voteManager) {
     return voteManager;
   }
   
-  // Try to use database-backed manager if configured
-  if (config.features.useDatabase) {
-    try {
-      const { getVoteManager: getDbVoteManager } = await import('./vote-manager-db.js');
-      voteManager = getDbVoteManager();
-      
-      // Test the connection
-      await voteManager.initialize();
-      isUsingDatabase = true;
-      
-      logger.info('Using database-backed vote manager');
-      return voteManager;
-    } catch (error) {
-      logger.warn('Failed to initialize database vote manager, falling back to file storage:', error.message);
-    }
-  }
-  
-  // Fall back to file-based manager
+  // Always use database-backed manager - no fallback
   try {
-    const { getVoteManager: getFileVoteManager } = await import('./vote-manager.js');
-    voteManager = getFileVoteManager();
-    isUsingDatabase = false;
+    const { getVoteManager: getDbVoteManager } = await import('./vote-manager-db.js');
+    voteManager = getDbVoteManager();
     
-    logger.info('Using file-based vote manager');
+    // Test the connection
+    await voteManager.initialize();
+    
+    logger.info('Database-backed vote manager initialized successfully');
     return voteManager;
   } catch (error) {
-    logger.error('Failed to initialize any vote manager:', error);
-    throw new Error('No vote manager available');
+    logger.error('Failed to initialize database vote manager:', error);
+    throw new Error(`Database connection required. Please ensure PostgreSQL and Redis are running. Error: ${error.message}`);
   }
 }
 
-// Adapter to make file-based manager async-compatible
-export class VoteManagerAdapter {
-  constructor(fileManager) {
-    this.fileManager = fileManager;
-  }
-  
-  async initialize() {
-    // File manager doesn't need initialization
-    return Promise.resolve();
-  }
-  
-  async vote(fingerprint, llmId, voteType, metadata = {}) {
-    try {
-      const result = this.fileManager.vote(fingerprint, llmId, voteType);
-      return Promise.resolve(result);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  
-  async getUserVotes(fingerprint) {
-    try {
-      const votes = this.fileManager.getUserVotes(fingerprint);
-      return Promise.resolve(votes);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  
-  async getVotes() {
-    try {
-      const votes = this.fileManager.getVotes();
-      return Promise.resolve(votes);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  
-  async getRankings() {
-    try {
-      const rankings = this.fileManager.getRankings();
-      return Promise.resolve(rankings);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  
-  async getStats() {
-    try {
-      const stats = this.fileManager.getStats();
-      return Promise.resolve(stats);
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  
-  async syncUserVotes(fingerprint) {
-    try {
-      const userVotes = this.fileManager.getUserVotes(fingerprint);
-      const votes = this.fileManager.getVotes();
-      const rankings = this.fileManager.getRankings();
-      const stats = this.fileManager.getStats();
-      
-      return Promise.resolve({
-        votes,
-        userVotes,
-        rankings,
-        stats
-      });
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  
-  async checkHealth() {
-    return Promise.resolve({
-      database: { postgres: false, redis: false },
-      cache: { status: 'not-available' },
-      status: 'healthy' // File-based is always healthy if accessible
-    });
-  }
-}
-
-// Wrapper function that returns the appropriate manager
+// Direct export of database manager - no adapter needed
 export async function getAdaptedVoteManager() {
-  const manager = await getVoteManager();
-  
-  // If it's the file-based manager, wrap it in the adapter
-  if (!isUsingDatabase && manager.vote && !manager.vote.constructor.name.includes('Async')) {
-    return new VoteManagerAdapter(manager);
-  }
-  
-  return manager;
+  return await getVoteManager();
 }
 
-// Export status function
+// Always using database storage
 export function isUsingDatabaseStorage() {
-  return isUsingDatabase;
-}
-
-// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\vote-manager.js
-import fs from 'fs';
-import path from 'path';
-import { llmData } from './llm-data.js';
-
-class VoteManager {
-  constructor() {
-    this.votesFile = path.join(process.cwd(), 'data', 'votes.json');
-    this.votes = {};
-    this.userVotes = new Map(); // fingerprint -> { llmId -> vote (-1, 0, 1) }
-    this.stats = {
-      totalVotes: 0,
-      lastHourVotes: [],
-      dailyVotes: new Map(),
-    };
-    this.loadVotes();
-  }
-
-  loadVotes() {
-    try {
-      // Create data directory if it doesn't exist
-      const dataDir = path.join(process.cwd(), 'data');
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-
-      // Load votes from file if it exists
-      if (fs.existsSync(this.votesFile)) {
-        const data = JSON.parse(fs.readFileSync(this.votesFile, 'utf8'));
-        this.votes = data.votes || {};
-        // Load user votes from persistent storage
-        if (data.userSessions) {
-          this.userVotes = new Map(Object.entries(data.userSessions));
-        }
-        // Restore stats properly, converting arrays back to Maps
-        if (data.stats) {
-          this.stats.totalVotes = data.stats.totalVotes || 0;
-          this.stats.lastHourVotes = data.stats.lastHourVotes || [];
-          this.stats.dailyVotes = new Map(data.stats.dailyVotes || []);
-        }
-      } else {
-        // Initialize with zero votes for all LLMs
-        llmData.forEach(llm => {
-          this.votes[llm.id] = 0;
-        });
-        this.saveVotes();
-      }
-    } catch (error) {
-      console.error('Error loading votes:', error);
-      // Initialize with empty votes
-      llmData.forEach(llm => {
-        this.votes[llm.id] = 0;
-      });
-    }
-  }
-
-  saveVotes() {
-    try {
-      const data = {
-        votes: this.votes,
-        userSessions: Object.fromEntries(this.userVotes.entries()),
-        stats: {
-          totalVotes: this.stats.totalVotes,
-          lastHourVotes: this.stats.lastHourVotes.slice(-100), // Keep last 100 entries
-          dailyVotes: Array.from(this.stats.dailyVotes.entries()).slice(-30), // Keep last 30 days
-        },
-        lastUpdated: new Date().toISOString(),
-      };
-      fs.writeFileSync(this.votesFile, JSON.stringify(data, null, 2));
-    } catch (error) {
-      console.error('Error saving votes:', error);
-    }
-  }
-
-  vote(fingerprint, llmId, voteType) {
-    // voteType: 1 for upvote, -1 for downvote, 0 for remove vote
-    if (!this.votes.hasOwnProperty(llmId)) {
-      return { success: false, error: 'Invalid LLM ID' };
-    }
-
-    // Get user's current votes
-    let userVoteMap = this.userVotes.get(fingerprint) || {};
-    const currentVote = userVoteMap[llmId] || 0;
-
-    // Calculate vote change
-    const voteChange = voteType - currentVote;
-    
-    if (voteChange === 0) {
-      return { success: false, error: 'Vote unchanged' };
-    }
-
-    // Update vote count
-    this.votes[llmId] += voteChange;
-    
-    // Update user's vote record
-    if (voteType === 0) {
-      delete userVoteMap[llmId];
-    } else {
-      userVoteMap[llmId] = voteType;
-    }
-    
-    if (Object.keys(userVoteMap).length === 0) {
-      this.userVotes.delete(fingerprint);
-    } else {
-      this.userVotes.set(fingerprint, userVoteMap);
-    }
-
-    // Update stats
-    this.updateStats(llmId, voteType);
-    
-    // Save immediately to ensure persistence
-    this.saveVotes();
-
-    return { 
-      success: true, 
-      votes: this.votes,
-      userVote: voteType,
-      previousVote: currentVote,
-    };
-  }
-
-  updateStats(llmId, voteType) {
-    const now = new Date();
-    
-    // Update total votes
-    if (voteType !== 0) {
-      this.stats.totalVotes++;
-    }
-    
-    // Track last hour votes
-    this.stats.lastHourVotes.push({
-      llmId,
-      voteType,
-      timestamp: now.toISOString(),
-    });
-    
-    // Remove votes older than 1 hour
-    const oneHourAgo = new Date(now - 60 * 60 * 1000);
-    this.stats.lastHourVotes = this.stats.lastHourVotes.filter(
-      v => new Date(v.timestamp) > oneHourAgo
-    );
-    
-    // Track daily votes
-    const today = now.toDateString();
-    const dailyCount = this.stats.dailyVotes.get(today) || 0;
-    this.stats.dailyVotes.set(today, dailyCount + 1);
-  }
-
-  getUserVotes(fingerprint) {
-    return this.userVotes.get(fingerprint) || {};
-  }
-
-  getVotes() {
-    return this.votes;
-  }
-
-  getRankings() {
-    const rankings = Object.entries(this.votes)
-      .map(([id, count]) => ({ id, count }))
-      .sort((a, b) => b.count - a.count)
-      .map((item, index) => ({ ...item, rank: index + 1 }));
-    
-    return rankings;
-  }
-
-  getStats() {
-    const now = new Date();
-    const oneHourAgo = new Date(now - 60 * 60 * 1000);
-    const today = now.toDateString();
-    
-    // Get trending (most voted in last hour)
-    const recentVotes = {};
-    this.stats.lastHourVotes.forEach(v => {
-      if (new Date(v.timestamp) > oneHourAgo && v.voteType !== 0) {
-        recentVotes[v.llmId] = (recentVotes[v.llmId] || 0) + 1;
-      }
-    });
-    
-    const trending = Object.entries(recentVotes)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([id]) => id);
-    
-    return {
-      totalVotes: this.stats.totalVotes,
-      votesToday: this.stats.dailyVotes.get(today) || 0,
-      votesLastHour: this.stats.lastHourVotes.filter(
-        v => new Date(v.timestamp) > oneHourAgo
-      ).length,
-      trending,
-      topModel: this.getRankings()[0]?.id || null,
-    };
-  }
-}
-
-// Singleton instance
-let voteManager;
-
-export function getVoteManager() {
-  if (!voteManager) {
-    voteManager = new VoteManager();
-  }
-  return voteManager;
+  return true;
 }
 
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\migrate.js
+const { Pool } = require('pg');
+const path = require('path');
+
+// Database configuration
+const dbConfig = {
+  connectionString: process.env.DATABASE_URL || 'postgresql://llm_user:changeme@localhost:5432/llm_tracker',
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+};
+
+const pool = new Pool(dbConfig);
+
+const migrations = [
+  {
+    name: '001_create_llms_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS llms (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        company VARCHAR(255) NOT NULL,
+        description TEXT,
+        use_cases JSONB DEFAULT '[]',
+        release_year INTEGER,
+        color VARCHAR(100),
+        logo VARCHAR(10),
+        image_url VARCHAR(500),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+      
+      -- Create index for faster queries
+      CREATE INDEX IF NOT EXISTS idx_llms_company ON llms(company);
+      CREATE INDEX IF NOT EXISTS idx_llms_release_year ON llms(release_year);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_llms_release_year;
+      DROP INDEX IF EXISTS idx_llms_company;
+      DROP TABLE IF EXISTS llms;
+    `
+  },
+  
+  {
+    name: '002_create_votes_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS votes (
+        id SERIAL PRIMARY KEY,
+        llm_id VARCHAR(255) NOT NULL REFERENCES llms(id) ON DELETE CASCADE,
+        vote_count INTEGER DEFAULT 0,
+        positive_votes INTEGER DEFAULT 0,
+        negative_votes INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(llm_id)
+      );
+      
+      -- Create indexes for performance
+      CREATE INDEX IF NOT EXISTS idx_votes_llm_id ON votes(llm_id);
+      CREATE INDEX IF NOT EXISTS idx_votes_vote_count ON votes(vote_count DESC);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_votes_vote_count;
+      DROP INDEX IF EXISTS idx_votes_llm_id;
+      DROP TABLE IF EXISTS votes;
+    `
+  },
+  
+  {
+    name: '003_create_user_sessions_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id SERIAL PRIMARY KEY,
+        fingerprint VARCHAR(255) NOT NULL,
+        ip_address INET,
+        user_agent TEXT,
+        country VARCHAR(2),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        last_activity TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        is_suspicious BOOLEAN DEFAULT FALSE,
+        vote_count INTEGER DEFAULT 0,
+        UNIQUE(fingerprint)
+      );
+      
+      -- Create indexes
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_fingerprint ON user_sessions(fingerprint);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_last_activity ON user_sessions(last_activity);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_suspicious ON user_sessions(is_suspicious);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_ip ON user_sessions(ip_address);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_user_sessions_ip;
+      DROP INDEX IF EXISTS idx_user_sessions_suspicious;
+      DROP INDEX IF EXISTS idx_user_sessions_last_activity;
+      DROP INDEX IF EXISTS idx_user_sessions_fingerprint;
+      DROP TABLE IF EXISTS user_sessions;
+    `
+  },
+  
+  {
+    name: '004_create_user_votes_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS user_votes (
+        id SERIAL PRIMARY KEY,
+        fingerprint VARCHAR(255) NOT NULL,
+        llm_id VARCHAR(255) NOT NULL REFERENCES llms(id) ON DELETE CASCADE,
+        vote_type INTEGER NOT NULL CHECK (vote_type IN (-1, 0, 1)),
+        previous_vote INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        ip_address INET,
+        user_agent TEXT,
+        UNIQUE(fingerprint, llm_id)
+      );
+      
+      -- Create indexes for performance
+      CREATE INDEX IF NOT EXISTS idx_user_votes_fingerprint ON user_votes(fingerprint);
+      CREATE INDEX IF NOT EXISTS idx_user_votes_llm_id ON user_votes(llm_id);
+      CREATE INDEX IF NOT EXISTS idx_user_votes_created_at ON user_votes(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_user_votes_vote_type ON user_votes(vote_type);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_user_votes_vote_type;
+      DROP INDEX IF EXISTS idx_user_votes_created_at;
+      DROP INDEX IF EXISTS idx_user_votes_llm_id;
+      DROP INDEX IF EXISTS idx_user_votes_fingerprint;
+      DROP TABLE IF EXISTS user_votes;
+    `
+  },
+  
+  {
+    name: '005_create_analytics_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS analytics (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(100) NOT NULL,
+        event_data JSONB NOT NULL DEFAULT '{}',
+        fingerprint VARCHAR(255),
+        ip_address INET,
+        user_agent TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+      
+      -- Create indexes for analytics queries
+      CREATE INDEX IF NOT EXISTS idx_analytics_event_type ON analytics(event_type);
+      CREATE INDEX IF NOT EXISTS idx_analytics_created_at ON analytics(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_analytics_fingerprint ON analytics(fingerprint);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_analytics_fingerprint;
+      DROP INDEX IF EXISTS idx_analytics_created_at;
+      DROP INDEX IF EXISTS idx_analytics_event_type;
+      DROP TABLE IF EXISTS analytics;
+    `
+  },
+  
+  {
+    name: '006_create_rate_limits_table',
+    up: `
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        id SERIAL PRIMARY KEY,
+        key VARCHAR(255) NOT NULL,
+        points INTEGER DEFAULT 0,
+        expire_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE(key)
+      );
+      
+      -- Create indexes
+      CREATE INDEX IF NOT EXISTS idx_rate_limits_key ON rate_limits(key);
+      CREATE INDEX IF NOT EXISTS idx_rate_limits_expire_at ON rate_limits(expire_at);
+    `,
+    down: `
+      DROP INDEX IF EXISTS idx_rate_limits_expire_at;
+      DROP INDEX IF EXISTS idx_rate_limits_key;
+      DROP TABLE IF EXISTS rate_limits;
+    `
+  },
+  
+  {
+    name: '007_create_triggers',
+    up: `
+      -- Create function to update timestamp
+      CREATE OR REPLACE FUNCTION update_updated_at_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          NEW.updated_at = NOW();
+          RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+      
+      -- Create triggers for updated_at
+      CREATE TRIGGER update_llms_updated_at BEFORE UPDATE ON llms 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+        
+      CREATE TRIGGER update_votes_updated_at BEFORE UPDATE ON votes 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+        
+      CREATE TRIGGER update_user_votes_updated_at BEFORE UPDATE ON user_votes 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    `,
+    down: `
+      DROP TRIGGER IF EXISTS update_user_votes_updated_at ON user_votes;
+      DROP TRIGGER IF EXISTS update_votes_updated_at ON votes;
+      DROP TRIGGER IF EXISTS update_llms_updated_at ON llms;
+      DROP FUNCTION IF EXISTS update_updated_at_column();
+    `
+  }
+];
+
+async function runMigrations() {
+  const client = await pool.connect();
+  
+  try {
+    console.log('Starting database migrations...');
+    
+    // Create migrations table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+    
+    // Get already executed migrations
+    const { rows: executedMigrations } = await client.query(
+      'SELECT name FROM migrations ORDER BY id'
+    );
+    
+    const executedNames = executedMigrations.map(row => row.name);
+    
+    // Run pending migrations
+    for (const migration of migrations) {
+      if (!executedNames.includes(migration.name)) {
+        console.log(`Running migration: ${migration.name}`);
+        
+        // Start transaction
+        await client.query('BEGIN');
+        
+        try {
+          await client.query(migration.up);
+          await client.query(
+            'INSERT INTO migrations (name) VALUES ($1)',
+            [migration.name]
+          );
+          await client.query('COMMIT');
+          
+          console.log(`✓ Migration completed: ${migration.name}`);
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      } else {
+        console.log(`✓ Migration already executed: ${migration.name}`);
+      }
+    }
+    
+    console.log('\nAll migrations completed successfully!');
+  } catch (error) {
+    console.error('Migration failed:', error);
+    process.exit(1);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+// Run migrations
+runMigrations();
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\migrate.mjs
 import dbManager from '../lib/database.js';
 import logger from '../lib/logger.js';
 
@@ -3668,7 +3390,83 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 export { runMigrations, migrations };
 
-// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\reset.js
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\reset-all.js
+const { Pool } = require('pg');
+
+// Database configuration
+const dbConfig = {
+  connectionString: process.env.DATABASE_URL || 'postgresql://llm_user:changeme@localhost:5432/llm_tracker',
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+};
+
+const pool = new Pool(dbConfig);
+
+async function resetAll() {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🔄 Resetting ALL data to zero...\n');
+    
+    // Start transaction
+    await client.query('BEGIN');
+    
+    // 1. Clear all user votes
+    console.log('1. Clearing all user votes...');
+    const userVotesResult = await client.query('DELETE FROM user_votes');
+    console.log(`   ✓ Deleted ${userVotesResult.rowCount} user votes`);
+    
+    // 2. Clear all user sessions 
+    console.log('2. Clearing all user sessions...');
+    const sessionsResult = await client.query('DELETE FROM user_sessions');
+    console.log(`   ✓ Deleted ${sessionsResult.rowCount} user sessions`);
+    
+    // 3. Clear analytics
+    console.log('3. Clearing analytics data...');
+    const analyticsResult = await client.query('DELETE FROM analytics');
+    console.log(`   ✓ Deleted ${analyticsResult.rowCount} analytics records`);
+    
+    // 4. Reset all vote counts to 0
+    console.log('4. Resetting all vote counts to 0...');
+    const votesResult = await client.query(
+      'UPDATE votes SET vote_count = 0, positive_votes = 0, negative_votes = 0'
+    );
+    console.log(`   ✓ Reset ${votesResult.rowCount} vote records to 0`);
+    
+    // 5. Clear rate limits
+    console.log('5. Clearing rate limits...');
+    const rateLimitsResult = await client.query('DELETE FROM rate_limits');
+    console.log(`   ✓ Deleted ${rateLimitsResult.rowCount} rate limit records`);
+    
+    // Commit transaction
+    await client.query('COMMIT');
+    
+    console.log('\n✅ ALL DATA RESET SUCCESSFULLY!');
+    console.log('   • All user votes: CLEARED');
+    console.log('   • All user sessions: CLEARED');  
+    console.log('   • All analytics: CLEARED');
+    console.log('   • All vote counts: RESET TO 0');
+    console.log('   • All rate limits: CLEARED');
+    console.log('\n🧹 Next steps:');
+    console.log('   1. Clear browser localStorage: Application → Storage → Local Storage → Clear All');
+    console.log('   2. Clear Redis cache: docker-compose exec redis redis-cli FLUSHDB');
+    console.log('   3. Refresh the browser page');
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Reset failed:', error);
+    process.exit(1);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+// Run reset
+resetAll();
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\reset.mjs
 import dbManager from '../lib/database.js';
 import cacheManager from '../lib/cache.js';
 import logger from '../lib/logger.js';
@@ -3773,6 +3571,316 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 export { resetDatabase };
 
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\seed.js
+const { Pool } = require('pg');
+
+// Database configuration
+const dbConfig = {
+  connectionString: process.env.DATABASE_URL || 'postgresql://llm_user:changeme@localhost:5432/llm_tracker',
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+};
+
+const pool = new Pool(dbConfig);
+
+const llmData = [
+  {
+    id: "gpt-4o",
+    name: "GPT-4o",
+    company: "OpenAI",
+    description: "Most advanced multimodal AI with vision, analysis, and coding capabilities",
+    useCases: ["General purpose", "Code generation", "Creative writing", "Vision tasks"],
+    releaseYear: 2024,
+    color: "from-green-500 to-emerald-600",
+    logo: "🤖",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/200px-OpenAI_Logo.svg.png",
+  },
+  {
+    id: "claude-3-5-sonnet",
+    name: "Claude 3.5 Sonnet",
+    company: "Anthropic",
+    description: "Balanced model excelling at analysis, coding, and nuanced conversation",
+    useCases: ["Code analysis", "Research", "Writing", "Complex reasoning"],
+    releaseYear: 2024,
+    color: "from-orange-500 to-amber-600",
+    logo: "🧠",
+    image: "https://www.anthropic.com/_next/static/media/claude-logo.2f5f0b53.svg",
+  },
+  {
+    id: "gemini-ultra",
+    name: "Gemini Ultra",
+    company: "Google",
+    description: "Google's flagship model with strong multimodal and reasoning abilities",
+    useCases: ["Multimodal tasks", "Scientific research", "Code", "Mathematics"],
+    releaseYear: 2024,
+    color: "from-blue-500 to-cyan-600",
+    logo: "💎",
+    image: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
+  },
+  {
+    id: "llama-3-70b",
+    name: "Llama 3 70B",
+    company: "Meta",
+    description: "Open-source powerhouse for customizable AI applications",
+    useCases: ["Open source projects", "Fine-tuning", "Research", "Commercial use"],
+    releaseYear: 2024,
+    color: "from-purple-500 to-violet-600",
+    logo: "🦙",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Meta_Platforms_Inc._logo.svg/200px-Meta_Platforms_Inc._logo.svg.png",
+  },
+  {
+    id: "mistral-large",
+    name: "Mistral Large",
+    company: "Mistral AI",
+    description: "European AI champion with strong multilingual capabilities",
+    useCases: ["Multilingual tasks", "European languages", "Code", "Efficiency"],
+    releaseYear: 2024,
+    color: "from-red-500 to-pink-600",
+    logo: "🌪️",
+    image: "https://docs.mistral.ai/img/logo.svg",
+  },
+  {
+    id: "command-r-plus",
+    name: "Command R+",
+    company: "Cohere",
+    description: "Enterprise-focused with excellent retrieval and grounding",
+    useCases: ["Enterprise search", "RAG systems", "Document analysis", "Business"],
+    releaseYear: 2024,
+    color: "from-indigo-500 to-blue-600",
+    logo: "📊",
+    image: "https://cohere.com/favicon.svg",
+  },
+  {
+    id: "grok",
+    name: "Grok",
+    company: "xAI",
+    description: "Real-time knowledge with humor and unconventional responses",
+    useCases: ["Real-time info", "Social media", "Humor", "Current events"],
+    releaseYear: 2023,
+    color: "from-gray-600 to-slate-700",
+    logo: "🚀",
+    image: "https://grok.x.ai/assets/grok-logo-light.svg",
+  },
+  {
+    id: "perplexity",
+    name: "Perplexity",
+    company: "Perplexity AI",
+    description: "Search-enhanced AI with real-time web access and citations",
+    useCases: ["Web search", "Research", "Fact-checking", "Citations"],
+    releaseYear: 2024,
+    color: "from-teal-500 to-cyan-600",
+    logo: "🔍",
+    image: "https://www.perplexity.ai/favicon.svg",
+  },
+  {
+    id: "qwen-2-5",
+    name: "Qwen 2.5",
+    company: "Alibaba",
+    description: "Strong Asian language support with competitive performance",
+    useCases: ["Chinese language", "Asian markets", "E-commerce", "Translation"],
+    releaseYear: 2024,
+    color: "from-yellow-500 to-orange-600",
+    logo: "🐉",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Alibaba-Logo.svg/200px-Alibaba-Logo.svg.png",
+  },
+  {
+    id: "falcon-180b",
+    name: "Falcon 180B",
+    company: "TII UAE",
+    description: "Open-source giant with strong performance across tasks",
+    useCases: ["Open source", "Research", "Arabic language", "General purpose"],
+    releaseYear: 2023,
+    color: "from-amber-600 to-yellow-700",
+    logo: "🦅",
+    image: "https://www.tii.ae/sites/default/files/2022-12/TII-logo-WHITE.png",
+  },
+  {
+    id: "bard",
+    name: "Bard (Gemini Pro)",
+    company: "Google",
+    description: "Google's conversational AI with web access and multimodal features",
+    useCases: ["Web browsing", "Conversation", "Creative tasks", "Integration"],
+    releaseYear: 2024,
+    color: "from-blue-500 to-green-600",
+    logo: "🎭",
+    image: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
+  },
+  {
+    id: "ernie-4",
+    name: "ERNIE 4.0",
+    company: "Baidu",
+    description: "Chinese AI leader with strong understanding of Chinese culture",
+    useCases: ["Chinese market", "Cultural context", "Search", "Business"],
+    releaseYear: 2024,
+    color: "from-red-600 to-orange-700",
+    logo: "🏮",
+    image: "https://upload.wikimedia.org/wikipedia/en/thumb/3/37/Baidu_Logo.svg/200px-Baidu_Logo.svg.png",
+  },
+  {
+    id: "deepseek-coder",
+    name: "DeepSeek Coder",
+    company: "DeepSeek",
+    description: "Specialized coding model with excellent debugging capabilities",
+    useCases: ["Code generation", "Debugging", "Code review", "Documentation"],
+    releaseYear: 2024,
+    color: "from-green-600 to-teal-700",
+    logo: "💻",
+    image: "https://github.com/deepseek-ai.png",
+  },
+  {
+    id: "mixtral-8x7b",
+    name: "Mixtral 8x7B",
+    company: "Mistral AI",
+    description: "Mixture of experts model with excellent efficiency",
+    useCases: ["Efficient inference", "MoE architecture", "Code", "Multiple languages"],
+    releaseYear: 2024,
+    color: "from-violet-600 to-purple-700",
+    logo: "🎨",
+    image: "https://docs.mistral.ai/img/logo.svg",
+  },
+  {
+    id: "yi-34b",
+    name: "Yi-34B",
+    company: "01.AI",
+    description: "Bilingual model excelling in Chinese and English tasks",
+    useCases: ["Chinese-English", "Translation", "Bilingual tasks", "Open source"],
+    releaseYear: 2024,
+    color: "from-purple-600 to-pink-700",
+    logo: "🎭",
+    image: "https://github.com/01-ai.png",
+  },
+  {
+    id: "solar-10-7b",
+    name: "SOLAR-10.7B",
+    company: "Upstage AI",
+    description: "Efficient Korean model with strong multilingual capabilities",
+    useCases: ["Korean language", "Efficient inference", "Asian languages", "Small models"],
+    releaseYear: 2024,
+    color: "from-orange-600 to-red-700",
+    logo: "☀️",
+    image: "https://github.com/UpstageAI.png",
+  },
+  {
+    id: "inflection-2-5",
+    name: "Inflection-2.5",
+    company: "Inflection AI",
+    description: "Personal AI with empathetic and supportive conversation style",
+    useCases: ["Personal assistant", "Emotional support", "Coaching", "Companionship"],
+    releaseYear: 2024,
+    color: "from-teal-600 to-blue-700",
+    logo: "💬",
+    image: "https://github.com/InflectionAI.png",
+  },
+  {
+    id: "vicuna-33b",
+    name: "Vicuna-33B",
+    company: "LMSYS",
+    description: "Fine-tuned Llama model with improved conversational abilities",
+    useCases: ["Chatbots", "Open source", "Fine-tuning base", "Research"],
+    releaseYear: 2023,
+    color: "from-pink-500 to-rose-600",
+    logo: "🦌",
+    image: "https://github.com/lm-sys.png",
+  },
+  {
+    id: "phi-3",
+    name: "Phi-3",
+    company: "Microsoft",
+    description: "Small but mighty model optimized for edge deployment",
+    useCases: ["Edge computing", "Mobile apps", "Low resource", "Fast inference"],
+    releaseYear: 2024,
+    color: "from-blue-600 to-indigo-700",
+    logo: "⚡",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png",
+  },
+  {
+    id: "stablelm-2",
+    name: "StableLM 2",
+    company: "Stability AI",
+    description: "Open model from the makers of Stable Diffusion",
+    useCases: ["Open source", "Customization", "Research", "Creative apps"],
+    releaseYear: 2024,
+    color: "from-purple-500 to-indigo-600",
+    logo: "🎯",
+    image: "https://github.com/Stability-AI.png",
+  }
+];
+
+async function seedDatabase() {
+  const client = await pool.connect();
+  
+  try {
+    console.log('Starting database seeding...\n');
+    
+    // Start transaction
+    await client.query('BEGIN');
+    
+    // Insert LLMs
+    console.log('Inserting LLM data...');
+    for (const llm of llmData) {
+      await client.query(
+        `INSERT INTO llms (id, name, company, description, use_cases, release_year, color, logo, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           company = EXCLUDED.company,
+           description = EXCLUDED.description,
+           use_cases = EXCLUDED.use_cases,
+           release_year = EXCLUDED.release_year,
+           color = EXCLUDED.color,
+           logo = EXCLUDED.logo,
+           image_url = EXCLUDED.image_url,
+           updated_at = NOW()`,
+        [
+          llm.id,
+          llm.name,
+          llm.company,
+          llm.description,
+          JSON.stringify(llm.useCases),
+          llm.releaseYear,
+          llm.color,
+          llm.logo,
+          llm.image
+        ]
+      );
+      console.log(`  ✓ ${llm.name}`);
+    }
+    
+    // Initialize votes table with zero votes for each LLM
+    console.log('\nInitializing votes table with 0 votes...');
+    for (const llm of llmData) {
+      await client.query(
+        `INSERT INTO votes (llm_id, vote_count, positive_votes, negative_votes)
+         VALUES ($1, 0, 0, 0)
+         ON CONFLICT (llm_id) DO UPDATE SET
+           vote_count = 0,
+           positive_votes = 0,
+           negative_votes = 0`,
+        [llm.id]
+      );
+      console.log(`  ✓ ${llm.name}: initialized with 0 votes`);
+    }
+    console.log('  ✓ All votes initialized to 0')
+    
+    // Commit transaction
+    await client.query('COMMIT');
+    
+    console.log('\n✅ Database seeded successfully!');
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ Seeding failed:', error);
+    process.exit(1);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
+// Run seeding
+seedDatabase();
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\scripts\seed.mjs
 import dbManager from '../lib/database.js';
 import { llmData } from '../lib/llm-data.js';
 import logger from '../lib/logger.js';
@@ -3894,20 +4002,35 @@ const useVoteStore = create((set, get) => ({
   
   // Initialize votes and fingerprint
   initializeVotes: async () => {
+    console.log('🚀 [INIT] Starting vote store initialization...');
     set({ loading: true, error: null });
     try {
       // Get fingerprint first
+      console.log('🔍 [INIT] Getting fingerprint...');
       const fingerprint = await fingerprintService.getFingerprintWithFallbacks();
+      console.log('🔍 [INIT] Fingerprint obtained:', fingerprint.substring(0, 8) + '...');
       set({ fingerprint });
       
       // Load votes from localStorage first for immediate UI update
+      console.log('💾 [INIT] Loading votes from localStorage...');
       const localVotes = get().loadVotesFromLocalStorage();
       if (localVotes.userVotes && Object.keys(localVotes.userVotes).length > 0) {
+        console.log('💾 [INIT] Found local user votes:', Object.keys(localVotes.userVotes).length, 'votes');
         set({ userVotes: localVotes.userVotes });
+      } else {
+        console.log('💾 [INIT] No local user votes found');
       }
       
       // Then sync with server
+      console.log('📡 [INIT] Syncing with server...');
       const response = await axios.post('/api/vote/sync', { fingerprint });
+      console.log('📡 [INIT] Server sync response:', {
+        votesCount: response.data.votes ? Object.keys(response.data.votes).length : 0,
+        userVotesCount: response.data.userVotes ? Object.keys(response.data.userVotes).length : 0,
+        hasRankings: !!response.data.rankings,
+        hasStats: !!response.data.stats
+      });
+      
       const serverData = {
         votes: response.data.votes || {},
         userVotes: response.data.userVotes || {},
@@ -3917,6 +4040,11 @@ const useVoteStore = create((set, get) => ({
         lastUpdate: new Date(),
       };
       
+      console.log('📡 [INIT] Setting server data:', {
+        totalVotes: Object.values(serverData.votes).reduce((sum, count) => sum + Math.abs(count), 0),
+        userVotesCount: Object.keys(serverData.userVotes).length
+      });
+      
       set(serverData);
       
       // Update rankings and stats after loading
@@ -3924,19 +4052,22 @@ const useVoteStore = create((set, get) => ({
       
       // Save to localStorage
       get().saveVotesToLocalStorage(serverData);
+      console.log('✅ [INIT] Vote store initialization completed successfully');
       
     } catch (error) {
-      console.error('Failed to load votes:', error);
+      console.error('❌ [INIT] Failed to load votes:', error);
       
       // Try to load from localStorage as fallback
       const localData = get().loadVotesFromLocalStorage();
       if (localData.votes) {
+        console.log('💾 [INIT] Using localStorage fallback data');
         set({ 
           ...localData,
           loading: false, 
           error: 'Using offline data',
         });
       } else {
+        console.log('🔄 [INIT] Initializing with zero votes');
         set({ 
           loading: false, 
           error: 'Failed to load votes',
@@ -3953,11 +4084,19 @@ const useVoteStore = create((set, get) => ({
   
   // Vote for an LLM
   vote: async (llmId, voteType) => {
+    console.log('🗳️ [VOTE] Starting vote process:', { llmId, voteType });
+    
     const currentUserVote = get().userVotes[llmId] || 0;
     const fingerprint = get().fingerprint;
     
+    console.log('🗳️ [VOTE] Current state:', { 
+      currentUserVote, 
+      fingerprint: fingerprint ? fingerprint.substring(0, 8) + '...' : 'none',
+      currentVotes: get().votes[llmId] || 0
+    });
+    
     if (!fingerprint) {
-      console.error('No fingerprint available');
+      console.error('❌ [VOTE] No fingerprint available');
       return;
     }
     
@@ -3968,6 +4107,12 @@ const useVoteStore = create((set, get) => ({
     // Calculate vote change
     const voteChange = voteType - currentUserVote;
     optimisticVotes[llmId] = (optimisticVotes[llmId] || 0) + voteChange;
+    
+    console.log('🗳️ [VOTE] Vote change calculation:', { 
+      voteChange, 
+      oldVoteCount: get().votes[llmId] || 0,
+      newVoteCount: optimisticVotes[llmId]
+    });
     
     if (voteType === 0) {
       delete optimisticUserVotes[llmId];
@@ -3980,24 +4125,53 @@ const useVoteStore = create((set, get) => ({
       userVotes: optimisticUserVotes,
     };
     
+    console.log('🗳️ [VOTE] Optimistic UI update:', { 
+      newVoteCount: newState.votes[llmId],
+      newUserVote: newState.userVotes[llmId] || 0
+    });
+    
     set(newState);
     
     // Save to localStorage immediately
     get().saveVotesToLocalStorage(newState);
+    console.log('💾 [VOTE] Saved optimistic state to localStorage');
     
     try {
+      console.log('📡 [VOTE] Sending request to server:', { fingerprint: fingerprint.substring(0, 8) + '...', llmId, voteType });
+      
       const response = await axios.post('/api/vote', { 
         fingerprint, 
         llmId, 
         voteType 
       });
       
+      console.log('📡 [VOTE] Server response:', {
+        success: response.data.success,
+        userVote: response.data.userVote,
+        previousVote: response.data.previousVote,
+        serverVoteCount: response.data.votes ? response.data.votes[llmId] : 'not provided'
+      });
+      
       if (response.data.success) {
+        // Properly update the user vote for this specific LLM
+        const updatedUserVotes = { ...get().userVotes };
+        if (response.data.userVote === 0) {
+          delete updatedUserVotes[llmId];
+        } else {
+          updatedUserVotes[llmId] = response.data.userVote;
+        }
+        
+        // Use server's authoritative vote counts for all LLMs
         const serverState = {
-          votes: response.data.votes,
-          userVotes: { ...get().userVotes, [llmId]: response.data.userVote },
+          votes: response.data.votes || get().votes,
+          userVotes: updatedUserVotes,
           lastUpdate: new Date(),
         };
+        
+        console.log('✅ [VOTE] Updating state with server data:', {
+          finalVoteCount: serverState.votes[llmId],
+          finalUserVote: serverState.userVotes[llmId] || 0
+        });
         
         set(serverState);
         
@@ -4006,9 +4180,11 @@ const useVoteStore = create((set, get) => ({
         
         // Save updated state to localStorage
         get().saveVotesToLocalStorage(serverState);
+        console.log('💾 [VOTE] Saved final state to localStorage');
       }
     } catch (error) {
-      console.error('Vote failed:', error);
+      console.error('❌ [VOTE] Server request failed:', error);
+      console.log('⚠️ [VOTE] Keeping optimistic update in place');
       
       // Don't revert - keep the optimistic update as it's saved locally
       // Update rankings even if server sync fails
@@ -4148,6 +4324,65 @@ const useVoteStore = create((set, get) => ({
     return {};
   },
   
+  // Sync with server for real-time updates
+  syncWithServer: async () => {
+    try {
+      const fingerprint = get().fingerprint;
+      if (!fingerprint) {
+        console.debug('🔄 [SYNC] Skipping sync - no fingerprint available');
+        return; // Skip sync if no fingerprint available
+      }
+      
+      console.debug('🔄 [SYNC] Starting background sync...');
+      const response = await axios.post('/api/vote/sync', { fingerprint });
+      
+      if (response.data) {
+        const currentUserVotes = get().userVotes;
+        
+        // Only update if there are actual changes to prevent unnecessary re-renders
+        const newVotes = response.data.votes || {};
+        const newStats = response.data.stats || get().stats;
+        const newRankings = response.data.rankings || [];
+        
+        // Check if votes have actually changed
+        const votesChanged = JSON.stringify(newVotes) !== JSON.stringify(get().votes);
+        const statsChanged = JSON.stringify(newStats) !== JSON.stringify(get().stats);
+        
+        console.debug('🔄 [SYNC] Sync data comparison:', {
+          votesChanged,
+          statsChanged,
+          currentTotalVotes: Object.values(get().votes).reduce((sum, count) => sum + Math.abs(count), 0),
+          newTotalVotes: Object.values(newVotes).reduce((sum, count) => sum + Math.abs(count), 0)
+        });
+        
+        if (votesChanged || statsChanged) {
+          console.debug('🔄 [SYNC] Updating state with new data from server');
+          set({
+            votes: newVotes,
+            rankings: newRankings,
+            stats: newStats,
+            lastUpdate: new Date(),
+            // Keep user votes from current state, don't override with server
+            userVotes: { ...currentUserVotes, ...(response.data.userVotes || {}) },
+          });
+          
+          // Update local storage with new data
+          get().saveVotesToLocalStorage({
+            votes: newVotes,
+            userVotes: currentUserVotes,
+            lastUpdate: new Date(),
+          });
+          console.debug('🔄 [SYNC] Background sync completed with updates');
+        } else {
+          console.debug('🔄 [SYNC] No changes detected, skipping update');
+        }
+      }
+    } catch (error) {
+      // Silently fail - this is background sync
+      console.debug('❌ [SYNC] Background sync failed:', error.message);
+    }
+  },
+  
   // Clear all stored data (for testing or user request)
   clearAllStoredData: () => {
     if (typeof window === 'undefined') return;
@@ -4184,3 +4419,25 @@ const useVoteStore = create((set, get) => ({
 
 export default useVoteStore;
 
+the values of the votes are not getting updated in real time
+i click on an upvote, downvote and nothing happens and then when i click on another upvote, downvote the result of what should have happened on the first upvote or downvote takes in affect.
+
+
+issue:
+
+
+BEFORE VOTE:
+- Initialized with fingerprint
+- No local votes found
+- Server sync: 20 LLMs, 0 user votes
+
+CLICK UPVOTE ON BARD:
+- Current: userVote=0, voteCount=0
+- Optimistic: userVote=1, voteCount=1
+- Server response: success BUT returns voteCount=0 (PROBLEM!)
+- UI shows: green button but 0 votes
+
+CLICK DOWNVOTE ON BARD:
+- Current: userVote=1, voteCount=0
+- Should change to: userVote=-1, voteCount=-1
+- But shows: red button with +1 votes (incorrect)

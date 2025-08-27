@@ -9,7 +9,8 @@
       "Bash(docker exec:*)",
       "Bash(docker-compose:*)",
       "Bash(npm run:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npx kill-port:*)"
     ],
     "deny": [],
     "ask": []

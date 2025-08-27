@@ -278,11 +278,8 @@ async function seedDatabase() {
     for (const llm of llmData) {
       await client.query(
         `INSERT INTO votes (llm_id, vote_count, positive_votes, negative_votes)
-         VALUES ($1, 0, 0, 0)
-         ON CONFLICT (llm_id) DO UPDATE SET
-           vote_count = 0,
-           positive_votes = 0,
-           negative_votes = 0`,
+        VALUES ($1, 0, 0, 0)
+        ON CONFLICT (llm_id) DO NOTHING`,  // Changed from DO UPDATE to DO NOTHING
         [llm.id]
       );
       console.log(`  ✓ ${llm.name}: initialized with 0 votes`);
