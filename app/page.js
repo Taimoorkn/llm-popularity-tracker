@@ -69,8 +69,8 @@ export default function Home() {
             Which LLM Rules in 2025?
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Cast your vote for the AI models you love. Upvote your favorites, downvote the ones you don't prefer.
-            Every vote counts in determining the community's choice!
+            Cast your vote for the AI models you love. Upvote your favorites, downvote the ones you don&apos;t prefer.
+            Every vote counts in determining the community&apos;s choice!
           </p>
         </motion.div>
         

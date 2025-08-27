@@ -1,0 +1,339 @@
+version: '3.8'
+
+# Production Docker Compose for 200k+ users with scaling capabilities
+services:
+  # PostgreSQL Primary
+  postgres-primary:
+    image: postgres:14-alpine
+    container_name: llm-postgres-primary
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: llm_tracker
+      POSTGRES_USER: llm_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./config/postgres-optimization.sql:/docker-entrypoint-initdb.d/01-optimize.sql
+      - ./init-db:/docker-entrypoint-initdb.d
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U llm_user -d llm_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - llm-network
+
+  # PostgreSQL Read Replica 1
+  postgres-read1:
+    image: postgres:14-alpine
+    container_name: llm-postgres-read1
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: llm_tracker
+      POSTGRES_USER: llm_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PRIMARY_HOST: postgres-primary
+      POSTGRES_PRIMARY_PORT: 5432
+      POSTGRES_PRIMARY_USER: llm_user
+      POSTGRES_PRIMARY_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_read1_data:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: |
+      bash -c "
+      pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U llm_user -v -P -W -X stream
+      echo 'standby_mode = on' >> /var/lib/postgresql/data/recovery.conf
+      echo 'primary_conninfo = host=postgres-primary port=5432 user=llm_user' >> /var/lib/postgresql/data/recovery.conf
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+      "
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks:
+      - llm-network
+
+  # PostgreSQL Read Replica 2
+  postgres-read2:
+    image: postgres:14-alpine
+    container_name: llm-postgres-read2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: llm_tracker
+      POSTGRES_USER: llm_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PRIMARY_HOST: postgres-primary
+      POSTGRES_PRIMARY_PORT: 5432
+      POSTGRES_PRIMARY_USER: llm_user
+      POSTGRES_PRIMARY_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_read2_data:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: |
+      bash -c "
+      pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U llm_user -v -P -W -X stream
+      echo 'standby_mode = on' >> /var/lib/postgresql/data/recovery.conf
+      echo 'primary_conninfo = host=postgres-primary port=5432 user=llm_user' >> /var/lib/postgresql/data/recovery.conf
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+      "
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks:
+      - llm-network
+
+  # PgBouncer Connection Pooler
+  pgbouncer:
+    image: bitnami/pgbouncer:latest
+    container_name: llm-pgbouncer
+    restart: unless-stopped
+    environment:
+      DATABASES_HOST: postgres-primary
+      DATABASES_PORT: 5432
+      DATABASES_DBNAME: llm_tracker
+      DATABASES_USER: llm_user
+      DATABASES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 10000
+      DEFAULT_POOL_SIZE: 25
+      MIN_POOL_SIZE: 10
+      RESERVE_POOL_SIZE: 5
+    ports:
+      - "6432:5432"
+    volumes:
+      - ./config/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - ./config/userlist.txt:/etc/pgbouncer/userlist.txt
+    depends_on:
+      - postgres-primary
+    networks:
+      - llm-network
+
+  # Redis Primary
+  redis-primary:
+    image: redis:7-alpine
+    container_name: llm-redis-primary
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_primary_data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - llm-network
+
+  # Redis Sentinel 1
+  redis-sentinel1:
+    image: redis:7-alpine
+    container_name: llm-redis-sentinel1
+    restart: unless-stopped
+    ports:
+      - "26379:26379"
+    volumes:
+      - ./config/sentinel1.conf:/usr/local/etc/redis/sentinel.conf
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    depends_on:
+      - redis-primary
+    networks:
+      - llm-network
+
+  # Redis Sentinel 2
+  redis-sentinel2:
+    image: redis:7-alpine
+    container_name: llm-redis-sentinel2
+    restart: unless-stopped
+    ports:
+      - "26380:26379"
+    volumes:
+      - ./config/sentinel2.conf:/usr/local/etc/redis/sentinel.conf
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    depends_on:
+      - redis-primary
+    networks:
+      - llm-network
+
+  # Redis Sentinel 3
+  redis-sentinel3:
+    image: redis:7-alpine
+    container_name: llm-redis-sentinel3
+    restart: unless-stopped
+    ports:
+      - "26381:26379"
+    volumes:
+      - ./config/sentinel3.conf:/usr/local/etc/redis/sentinel.conf
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    depends_on:
+      - redis-primary
+    networks:
+      - llm-network
+
+  # Application instances (scale with docker-compose up --scale app=8)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://llm_user:${POSTGRES_PASSWORD:-changeme}@pgbouncer:5432/llm_tracker
+      POSTGRES_HOST: pgbouncer
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: llm_tracker
+      POSTGRES_USER: llm_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      REDIS_SENTINELS: redis-sentinel1:26379,redis-sentinel2:26379,redis-sentinel3:26379
+      REDIS_MASTER_NAME: mymaster
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:-change-this-session-secret}
+      PORT: 3000
+      # PM2 Configuration
+      PM2_INSTANCES: max
+      PM2_EXEC_MODE: cluster
+    volumes:
+      - ./data:/app/data
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    depends_on:
+      - pgbouncer
+      - redis-primary
+      - redis-sentinel1
+      - redis-sentinel2
+      - redis-sentinel3
+    networks:
+      - llm-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: llm-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-scale.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - app
+    networks:
+      - llm-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: llm-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - llm-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: llm-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - llm-network
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: llm-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    networks:
+      - llm-network
+
+  # Postgres Exporter for database metrics
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: llm-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://llm_user:${POSTGRES_PASSWORD:-changeme}@postgres-primary:5432/llm_tracker?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres-primary
+    networks:
+      - llm-network
+
+  # Redis Exporter for cache metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: llm-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis-primary:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis-primary
+    networks:
+      - llm-network
+
+volumes:
+  postgres_primary_data:
+  postgres_read1_data:
+  postgres_read2_data:
+  redis_primary_data:
+  nginx_cache:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  llm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
