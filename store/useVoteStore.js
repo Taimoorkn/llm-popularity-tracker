@@ -121,9 +121,18 @@ const useVoteStore = create((set, get) => ({
       });
       
       if (response.data.success) {
+        // Properly update the user vote for this specific LLM
+        const updatedUserVotes = { ...get().userVotes };
+        if (response.data.userVote === 0) {
+          delete updatedUserVotes[llmId];
+        } else {
+          updatedUserVotes[llmId] = response.data.userVote;
+        }
+        
+        // Use server's authoritative vote counts for all LLMs
         const serverState = {
-          votes: response.data.votes,
-          userVotes: { ...get().userVotes, [llmId]: response.data.userVote },
+          votes: response.data.votes || get().votes,
+          userVotes: updatedUserVotes,
           lastUpdate: new Date(),
         };
         

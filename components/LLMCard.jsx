@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
+import { ChevronUp, ChevronDown, TrendingUp, X } from 'lucide-react';
 import useVoteStore from '@/store/useVoteStore';
 import { toast } from 'sonner';
 
@@ -16,14 +16,16 @@ export default function LLMCard({ llm, index }) {
   const rank = getRank(llm.id);
   
   const handleVote = async (voteType) => {
-    if (userVote === voteType) {
-      // Remove vote if clicking the same button
+    if (voteType === 0) {
+      // Clear vote
       await vote(llm.id, 0);
       toast.success('Vote removed');
-    } else {
+    } else if (userVote !== voteType) {
+      // Only vote if it's different from current vote
       await vote(llm.id, voteType);
       toast.success(voteType === 1 ? 'Upvoted!' : 'Downvoted!');
     }
+    // If clicking the same vote button, do nothing (no toggle)
   };
   
   return (
@@ -83,38 +85,62 @@ export default function LLMCard({ llm, index }) {
       {/* Vote Section */}
       <div className="flex items-center justify-between bg-black/20 backdrop-blur-sm rounded-lg p-3">
         <motion.button
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.05 }}
+          whileTap={userVote !== 1 ? { scale: 0.95 } : {}}
+          whileHover={userVote !== 1 ? { scale: 1.05 } : {}}
           onClick={() => handleVote(1)}
+          disabled={userVote === 1}
           className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all shadow-md ${
             userVote === 1
-              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-green-500/30'
-              : 'bg-white/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 border border-green-400/30'
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-green-500/30 cursor-default opacity-100'
+              : 'bg-white/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 border border-green-400/30 cursor-pointer'
           }`}
           aria-label="Upvote"
+          title={userVote === 1 ? "You upvoted this" : "Upvote"}
         >
           <ChevronUp size={20} strokeWidth={2.5} />
         </motion.button>
         
-        <div className="flex flex-col items-center px-4">
-          <span className={`text-xl font-bold ${
-            voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-400'
-          }`}>
-            {voteCount > 0 ? '+' : ''}{voteCount}
-          </span>
-          <span className="text-xs text-muted-foreground/60">votes</span>
+        <div className="flex items-center gap-2">
+          {/* Vote count */}
+          <div className="flex flex-col items-center">
+            <span className={`text-xl font-bold ${
+              voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-400'
+            }`}>
+              {voteCount > 0 ? '+' : ''}{voteCount}
+            </span>
+            <span className="text-xs text-muted-foreground/60">votes</span>
+          </div>
+          
+          {/* Clear vote button - only show if user has voted */}
+          {userVote !== 0 && (
+            <motion.button
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.1 }}
+              onClick={() => handleVote(0)}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white border border-gray-400/30 transition-all"
+              aria-label="Clear vote"
+              title="Clear vote"
+            >
+              <X size={16} strokeWidth={2.5} />
+            </motion.button>
+          )}
         </div>
         
         <motion.button
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.05 }}
+          whileTap={userVote !== -1 ? { scale: 0.95 } : {}}
+          whileHover={userVote !== -1 ? { scale: 1.05 } : {}}
           onClick={() => handleVote(-1)}
+          disabled={userVote === -1}
           className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all shadow-md ${
             userVote === -1
-              ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-red-500/30'
-              : 'bg-white/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-400/30'
+              ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-red-500/30 cursor-default opacity-100'
+              : 'bg-white/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-400/30 cursor-pointer'
           }`}
           aria-label="Downvote"
+          title={userVote === -1 ? "You downvoted this" : "Downvote"}
         >
           <ChevronDown size={20} strokeWidth={2.5} />
         </motion.button>
