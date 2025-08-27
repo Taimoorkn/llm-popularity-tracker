@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Architecture
 
 ### Overview
-This is a Next.js 15 application for tracking and voting on LLM popularity. Users can upvote/downvote various LLMs, with real-time updates and persistent storage. The app supports both simple file-based storage and production-ready database storage with PostgreSQL and Redis.
+This is a Next.js 15 application for tracking and voting on LLM popularity. Users can upvote/downvote various LLMs, with real-time updates and persistent storage. The app uses production-ready database storage with PostgreSQL and Redis, designed to handle 500k+ concurrent users.
 
 ### Tech Stack
 - **Frontend**: Next.js 15, React 19, Zustand, Tailwind CSS, Framer Motion, Recharts
@@ -46,10 +46,10 @@ This is a Next.js 15 application for tracking and voting on LLM popularity. User
 **Data Flow**
 1. Client votes trigger optimistic UI updates via Zustand
 2. API calls to `/api/vote` persist changes server-side
-3. VoteManager handles persistence (file or database based on config)
+3. DatabaseVoteManager handles persistence in PostgreSQL
 4. Session-based voting using httpOnly cookies prevents manipulation
-5. Real-time polling every 10 seconds keeps data fresh
-6. Redis caches frequently accessed data in production
+5. Real-time polling every 5 seconds keeps data fresh
+6. Redis caches frequently accessed data and handles pub/sub for real-time updates
 
 **Vote System Design**
 - Session-based voting (one vote per LLM per session)
@@ -58,17 +58,18 @@ This is a Next.js 15 application for tracking and voting on LLM popularity. User
 - Calculates trending models based on last hour activity
 - Fraud detection with fingerprinting and rate limiting
 
-**Storage Modes**
-1. **File-based** (Development/Simple):
-   - `lib/vote-manager.js` - Handles file operations
-   - `data/votes.json` - Stores all vote data
-   - Auto-saves every 10 votes
-   
-2. **Database** (Production):
-   - `lib/vote-manager-db.js` - PostgreSQL operations
+**Storage Architecture**
+- **PostgreSQL Database**:
+   - `lib/vote-manager-db.js` - Database operations
    - `lib/database.js` - Connection pooling
-   - Redis for caching and session storage
+   - Stores votes, user sessions, and analytics
    - Migrations in `scripts/migrate.js`
+   
+- **Redis Cache**:
+   - Session storage and caching layer
+   - Real-time pub/sub for vote updates
+   - Rate limiting and fraud detection
+   - Activity tracking
 
 **API Endpoints**
 - `POST /api/vote` - Submit a vote (rate limited: 60/min)
@@ -77,15 +78,17 @@ This is a Next.js 15 application for tracking and voting on LLM popularity. User
 - `GET /api/health` - Health check (unlimited)
 
 **Key Files Structure**
-- `app/page.js` - Main voting interface with search, sort, filtering
+- `app/page.js` - Main voting interface with search, sort, filtering and real-time polling
 - `app/layout.js` - Root layout with metadata and providers
 - `app/api/` - API route handlers
 - `components/` - React components (Header, LLMCard, StatsPanel, VoteChart)
-- `lib/vote-manager-wrapper.js` - Determines which storage mode to use
+- `lib/vote-manager-wrapper.js` - Database manager initialization
+- `lib/vote-manager-db.js` - PostgreSQL database operations
+- `lib/cache.js` - Redis caching and pub/sub
 - `lib/llm-data.js` - Static LLM definitions (20 models)
 - `lib/middleware.js` - Rate limiting and security middleware
 - `lib/logger.js` - Logging configuration (Winston/Pino)
-- `store/useVoteStore.js` - Zustand store for client state
+- `store/useVoteStore.js` - Zustand store with real-time sync
 
 **UI Components**
 - Framer Motion for smooth animations
@@ -137,12 +140,13 @@ The project includes a complete Docker setup:
 
 ## Important Considerations
 
-- Vote data persists to `data/votes.json` in file mode or PostgreSQL in database mode
+- Vote data persists to PostgreSQL with Redis caching
 - Session cookies expire after 30 days
-- File mode saves to disk every 10 votes to reduce I/O
-- Database mode uses connection pooling and prepared statements
+- Real-time updates via polling every 5 seconds and Redis pub/sub
+- Database uses connection pooling and prepared statements
 - The app tracks hourly and daily voting statistics
 - No authentication system - voting is session-based only
 - Rate limiting is enforced at both application and Nginx level
 - All LLM logos are loaded from remote CDNs (configured in next.config.mjs)
-- The app auto-creates necessary files/tables on first run
+- The app auto-creates necessary database tables on first run
+- Designed to handle 500k+ concurrent users with proper scaling

@@ -285,6 +285,52 @@ const useVoteStore = create((set, get) => ({
     return {};
   },
   
+  // Sync with server for real-time updates
+  syncWithServer: async () => {
+    try {
+      const fingerprint = get().fingerprint;
+      if (!fingerprint) {
+        return; // Skip sync if no fingerprint available
+      }
+      
+      const response = await axios.post('/api/vote/sync', { fingerprint });
+      
+      if (response.data) {
+        const currentUserVotes = get().userVotes;
+        
+        // Only update if there are actual changes to prevent unnecessary re-renders
+        const newVotes = response.data.votes || {};
+        const newStats = response.data.stats || get().stats;
+        const newRankings = response.data.rankings || [];
+        
+        // Check if votes have actually changed
+        const votesChanged = JSON.stringify(newVotes) !== JSON.stringify(get().votes);
+        const statsChanged = JSON.stringify(newStats) !== JSON.stringify(get().stats);
+        
+        if (votesChanged || statsChanged) {
+          set({
+            votes: newVotes,
+            rankings: newRankings,
+            stats: newStats,
+            lastUpdate: new Date(),
+            // Keep user votes from current state, don't override with server
+            userVotes: { ...currentUserVotes, ...(response.data.userVotes || {}) },
+          });
+          
+          // Update local storage with new data
+          get().saveVotesToLocalStorage({
+            votes: newVotes,
+            userVotes: currentUserVotes,
+            lastUpdate: new Date(),
+          });
+        }
+      }
+    } catch (error) {
+      // Silently fail - this is background sync
+      console.debug('Background sync failed:', error.message);
+    }
+  },
+  
   // Clear all stored data (for testing or user request)
   clearAllStoredData: () => {
     if (typeof window === 'undefined') return;

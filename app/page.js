@@ -19,7 +19,15 @@ export default function Home() {
   
   useEffect(() => {
     initializeVotes();
-    // Removed automatic polling - only update on page load/refresh
+    
+    // Set up polling for real-time updates (every 5 seconds)
+    const pollInterval = setInterval(() => {
+      // Silently sync with server to get latest votes
+      useVoteStore.getState().syncWithServer();
+    }, 5000); // Poll every 5 seconds for better real-time experience
+    
+    // Clean up on unmount
+    return () => clearInterval(pollInterval);
   }, [initializeVotes]);
   
   // Filter LLMs but maintain stable ordering
