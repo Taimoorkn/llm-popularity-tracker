@@ -17,17 +17,18 @@ import { BarChart3, PieChart } from 'lucide-react';
 
 export default function VoteChart() {
   const [chartType, setChartType] = useState('bar');
-  const { rankings, llms } = useVoteStore();
+  const { votes, llms } = useVoteStore();
   
-  // Prepare chart data
-  const chartData = rankings.slice(0, 10).map((item) => {
-    const llm = llms.find((l) => l.id === item.id);
+  // Prepare chart data - show ALL LLMs with their vote counts
+  const chartData = llms.map((llm) => {
+    const voteCount = votes[llm.id] || 0;
     return {
-      name: llm?.name || item.id,
-      votes: item.count,
-      color: llm?.color || 'from-gray-500 to-gray-600',
+      name: llm.name,
+      votes: voteCount,
+      color: llm.color || 'from-gray-500 to-gray-600',
+      id: llm.id,
     };
-  });
+  }).sort((a, b) => b.votes - a.votes); // Sort by votes descending
   
   // Extract gradient colors for bars
   const getBarColor = (color) => {
@@ -78,7 +79,7 @@ export default function VoteChart() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
           <BarChart3 size={24} className="text-primary" />
-          Top 10 Rankings
+          All LLM Votes
         </h2>
         <div className="flex gap-2">
           <button
@@ -92,35 +93,31 @@ export default function VoteChart() {
         </div>
       </div>
       
-      {chartData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-            <XAxis
-              dataKey="name"
-              angle={-45}
-              textAnchor="end"
-              height={100}
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              stroke="#27272a"
-            />
-            <YAxis
-              tick={{ fill: '#9ca3af' }}
-              stroke="#27272a"
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="votes" radius={[8, 8, 0, 0]}>
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry.color)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-          No voting data available yet
-        </div>
-      )}
+      <ResponsiveContainer width="100%" height={500}>
+        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+          <XAxis
+            dataKey="name"
+            angle={-45}
+            textAnchor="end"
+            height={120}
+            tick={{ fill: '#9ca3af', fontSize: 10 }}
+            stroke="#27272a"
+            interval={0}
+          />
+          <YAxis
+            tick={{ fill: '#9ca3af' }}
+            stroke="#27272a"
+            domain={['dataMin - 1', 'dataMax + 1']}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Bar dataKey="votes" radius={[4, 4, 0, 0]}>
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={getBarColor(entry.color)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </motion.div>
   );
 }

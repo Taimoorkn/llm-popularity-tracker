@@ -14,7 +14,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('votes'); // votes, name, company
   const [viewMode, setViewMode] = useState('grid'); // grid, list
-  const [showChart, setShowChart] = useState(false);
+  const [showChart, setShowChart] = useState(true);
   
   const { llms, initializeVotes, rankings, loading } = useVoteStore();
   
@@ -104,32 +104,13 @@ export default function Home() {
               {viewMode === 'grid' ? <List size={20} /> : <Grid3x3 size={20} />}
             </button>
             
-            <button
-              onClick={() => setShowChart(!showChart)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                showChart 
-                  ? 'bg-primary text-white' 
-                  : 'bg-card border border-border text-foreground hover:bg-card-hover'
-              }`}
-            >
-              <TrendingUp size={20} />
-            </button>
           </div>
         </div>
         
-        {/* Chart */}
-        <AnimatePresence>
-          {showChart && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-8"
-            >
-              <VoteChart />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Chart - Always visible */}
+        <div className="mb-8">
+          <VoteChart />
+        </div>
         
         {/* LLM Grid/List */}
         {loading ? (
@@ -143,9 +124,9 @@ export default function Home() {
         ) : (
           <motion.div
             layout
-            className={`grid gap-6 ${
+            className={`grid gap-4 ${
               viewMode === 'grid' 
-                ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
+                ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' 
                 : 'grid-cols-1'
             }`}
           >
