@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
-import { apiMiddleware, schemas, securityHeaders } from '@/lib/middleware';
+import { apiMiddleware, schemas, securityHeaders, logResponse } from '@/lib/middleware';
 import logger from '@/lib/logger';
 
 export async function POST(request) {
@@ -25,7 +25,7 @@ export async function POST(request) {
     const voteManager = await getAdaptedVoteManager();
     const syncData = await voteManager.syncUserVotes(fingerprint);
     
-    logger.logResponse(requestInfo, { status: 200 });
+    logResponse(requestInfo, { status: 200 });
     
     return NextResponse.json(
       syncData,
@@ -35,7 +35,7 @@ export async function POST(request) {
     );
   } catch (error) {
     logger.error('Sync votes error:', error);
-    logger.logResponse(requestInfo, { status: 500 }, error);
+    logResponse(requestInfo, { status: 500 }, error);
     
     return NextResponse.json(
       { error: 'Failed to sync votes' },

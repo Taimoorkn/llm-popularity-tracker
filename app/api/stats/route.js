@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
-import { apiMiddleware, securityHeaders } from '@/lib/middleware';
+import { apiMiddleware, securityHeaders, logResponse } from '@/lib/middleware';
 import logger from '@/lib/logger';
 
 export async function GET(request) {
@@ -23,7 +23,7 @@ export async function GET(request) {
     const stats = await voteManager.getStats();
     const rankings = await voteManager.getRankings();
     
-    logger.logResponse(requestInfo, { status: 200 });
+    logResponse(requestInfo, { status: 200 });
     
     return NextResponse.json(
       {
@@ -37,7 +37,7 @@ export async function GET(request) {
     );
   } catch (error) {
     logger.error('Stats error:', error);
-    logger.logResponse(requestInfo, { status: 500 }, error);
+    logResponse(requestInfo, { status: 500 }, error);
     
     return NextResponse.json(
       { error: 'Failed to get stats' },

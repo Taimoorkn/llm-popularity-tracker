@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
-import { apiMiddleware, schemas, detectFraud, securityHeaders } from '@/lib/middleware';
+import { apiMiddleware, schemas, detectFraud, securityHeaders, logResponse } from '@/lib/middleware';
 import logger from '@/lib/logger';
 
 export async function POST(request) {
@@ -57,7 +57,7 @@ export async function POST(request) {
     }
     
     // Log successful vote
-    logger.logResponse(requestInfo, { status: 200 });
+    logResponse(requestInfo, { status: 200 });
     
     return NextResponse.json(
       {
@@ -73,7 +73,7 @@ export async function POST(request) {
     );
   } catch (error) {
     logger.error('Vote error:', error);
-    logger.logResponse(requestInfo, { status: 500 }, error);
+    logResponse(requestInfo, { status: 500 }, error);
     
     return NextResponse.json(
       { error: 'Failed to process vote' },
