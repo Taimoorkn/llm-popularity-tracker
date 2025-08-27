@@ -16,14 +16,26 @@ export default function LLMCard({ llm, index }) {
   const rank = getRank(llm.id);
   
   const handleVote = async (voteType) => {
+    console.log('🎯 [CARD] Vote button clicked:', { 
+      llm: llm.name, 
+      llmId: llm.id, 
+      voteType, 
+      currentUserVote: userVote,
+      currentVoteCount: voteCount 
+    });
+    
     if (voteType === 0) {
       // Clear vote
+      console.log('🎯 [CARD] Clearing vote for', llm.name);
       await vote(llm.id, 0);
       toast.success('Vote removed');
     } else if (userVote !== voteType) {
       // Only vote if it's different from current vote
+      console.log('🎯 [CARD] Casting new vote for', llm.name, ':', voteType === 1 ? 'UPVOTE' : 'DOWNVOTE');
       await vote(llm.id, voteType);
       toast.success(voteType === 1 ? 'Upvoted!' : 'Downvoted!');
+    } else {
+      console.log('🎯 [CARD] Same vote clicked, ignoring:', { llm: llm.name, voteType });
     }
     // If clicking the same vote button, do nothing (no toggle)
   };

@@ -274,37 +274,20 @@ async function seedDatabase() {
     }
     
     // Initialize votes table with zero votes for each LLM
-    console.log('\nInitializing votes table...');
+    console.log('\nInitializing votes table with 0 votes...');
     for (const llm of llmData) {
       await client.query(
         `INSERT INTO votes (llm_id, vote_count, positive_votes, negative_votes)
          VALUES ($1, 0, 0, 0)
-         ON CONFLICT (llm_id) DO NOTHING`,
+         ON CONFLICT (llm_id) DO UPDATE SET
+           vote_count = 0,
+           positive_votes = 0,
+           negative_votes = 0`,
         [llm.id]
       );
+      console.log(`  ✓ ${llm.name}: initialized with 0 votes`);
     }
-    console.log('  ✓ Votes table initialized');
-    
-    // Add some sample initial votes (optional - can be removed)
-    const sampleVotes = [
-      { llm_id: 'gpt-4o', positive: 150, negative: 20 },
-      { llm_id: 'claude-3-5-sonnet', positive: 140, negative: 15 },
-      { llm_id: 'gemini-ultra', positive: 100, negative: 25 },
-      { llm_id: 'llama-3-70b', positive: 120, negative: 10 },
-      { llm_id: 'mistral-large', positive: 80, negative: 12 },
-    ];
-    
-    console.log('\nAdding sample votes...');
-    for (const vote of sampleVotes) {
-      const voteCount = vote.positive - vote.negative;
-      await client.query(
-        `UPDATE votes 
-         SET vote_count = $1, positive_votes = $2, negative_votes = $3
-         WHERE llm_id = $4`,
-        [voteCount, vote.positive, vote.negative, vote.llm_id]
-      );
-      console.log(`  ✓ ${vote.llm_id}: +${vote.positive} / -${vote.negative}`);
-    }
+    console.log('  ✓ All votes initialized to 0')
     
     // Commit transaction
     await client.query('COMMIT');

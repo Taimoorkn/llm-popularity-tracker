@@ -1,17 +1,20 @@
+# Development Docker Compose - PostgreSQL and Redis only
+# Run your Next.js app locally for development
 services:
   postgres:
     image: postgres:14-alpine
-    container_name: llm-tracker-postgres
+    container_name: llm-tracker-postgres-dev
     restart: unless-stopped
     environment:
       POSTGRES_DB: llm_tracker
       POSTGRES_USER: llm_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=en_US.UTF-8"
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U llm_user -d llm_tracker"]
       interval: 10s
@@ -20,19 +23,20 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: llm-tracker-redis
+    container_name: llm-tracker-redis-dev
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "6379:6379"
     volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
+      - redis_data_dev:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+# Production services (use with --profile production)
   app:
     build:
       context: .
@@ -43,15 +47,15 @@ services:
       - "${PORT:-3000}:3000"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://llm_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/llm_tracker
+      DATABASE_URL: postgresql://llm_user:changeme@postgres:5432/llm_tracker
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: llm_tracker
       POSTGRES_USER: llm_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: changeme
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_PASSWORD: ""
       JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
       SESSION_SECRET: ${SESSION_SECRET:-change-this-session-secret}
     depends_on:
@@ -69,8 +73,9 @@ services:
         npm run db:seed &&
         node server.js
       "
+    profiles:
+      - production
 
-  # Optional: Nginx reverse proxy for production
   nginx:
     image: nginx:alpine
     container_name: llm-tracker-nginx
@@ -87,9 +92,9 @@ services:
       - production
 
 volumes:
-  postgres_data:
+  postgres_data_dev:
     driver: local
-  redis_data:
+  redis_data_dev:
     driver: local
 
 networks:
