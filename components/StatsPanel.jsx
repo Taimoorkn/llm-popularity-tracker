@@ -1,19 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Users, Clock, Trophy, Activity } from 'lucide-react';
 import useVoteStore from '@/store/useVoteStore';
 
 export default function StatsPanel() {
-  const { stats, fetchStats } = useVoteStore();
-  
-  useEffect(() => {
-    // Fetch stats initially and every 30 seconds
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, [fetchStats]);
+  const { stats } = useVoteStore();
   
   const statCards = [
     {
@@ -40,7 +32,7 @@ export default function StatsPanel() {
     {
       icon: Trophy,
       label: 'Leading',
-      value: stats.topModel ? stats.topModel.replace(/-/g, ' ').toUpperCase() : 'None',
+      value: stats.topModel || 'None',
       color: 'text-yellow-500',
       bgColor: 'bg-yellow-500/10',
       small: true,

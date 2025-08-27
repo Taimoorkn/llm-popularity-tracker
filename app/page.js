@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, TrendingUp, Grid3x3, List } from 'lucide-react';
+import { Search, Filter, TrendingUp } from 'lucide-react';
 import { Toaster } from 'sonner';
 import Header from '@/components/Header';
 import LLMCard from '@/components/LLMCard';
@@ -12,41 +12,38 @@ import useVoteStore from '@/store/useVoteStore';
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('votes'); // votes, name, company
-  const [viewMode, setViewMode] = useState('grid'); // grid, list
+  const [sortBy, setSortBy] = useState('name'); // votes, name, company
   const [showChart, setShowChart] = useState(true);
   
   const { llms, initializeVotes, rankings, loading } = useVoteStore();
   
   useEffect(() => {
     initializeVotes();
-    // Set up polling for real-time updates
-    const interval = setInterval(() => {
-      initializeVotes();
-    }, 10000); // Update every 10 seconds
-    
-    return () => clearInterval(interval);
+    // Removed automatic polling - only update on page load/refresh
   }, [initializeVotes]);
   
-  // Filter and sort LLMs
-  const filteredAndSortedLLMs = llms
+  // Filter LLMs but maintain stable ordering
+  const filteredLLMs = llms
     .filter(llm => 
       llm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       llm.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
       llm.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (sortBy === 'votes') {
-        const aRank = rankings.find(r => r.id === a.id)?.rank || 999;
-        const bRank = rankings.find(r => r.id === b.id)?.rank || 999;
-        return aRank - bRank;
-      } else if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortBy === 'company') {
-        return a.company.localeCompare(b.company);
-      }
-      return 0;
-    });
+    );
+  
+  // Create stable sorted order that doesn't change based on vote changes
+  const stableSortedLLMs = [...filteredLLMs].sort((a, b) => {
+    if (sortBy === 'name') {
+      return a.name.localeCompare(b.name);
+    } else if (sortBy === 'company') {
+      return a.company.localeCompare(b.company);
+    } else if (sortBy === 'votes') {
+      // Use initial vote counts from data, not dynamic rankings
+      const aInitialRank = llms.findIndex(llm => llm.id === a.id);
+      const bInitialRank = llms.findIndex(llm => llm.id === b.id);
+      return aInitialRank - bInitialRank;
+    }
+    return 0;
+  });
   
   return (
     <div className="min-h-screen bg-background">
@@ -96,13 +93,6 @@ export default function Home() {
               <option value="company">Sort by Company</option>
             </select>
             
-            <button
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              className="p-2 bg-card border border-border rounded-lg text-foreground hover:bg-card-hover transition-colors"
-              aria-label="Toggle view mode"
-            >
-              {viewMode === 'grid' ? <List size={20} /> : <Grid3x3 size={20} />}
-            </button>
             
           </div>
         </div>
@@ -124,19 +114,15 @@ export default function Home() {
         ) : (
           <motion.div
             layout
-            className={`grid gap-4 ${
-              viewMode === 'grid' 
-                ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' 
-                : 'grid-cols-1'
-            }`}
+            className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
           >
-            {filteredAndSortedLLMs.map((llm, index) => (
+            {stableSortedLLMs.map((llm, index) => (
               <LLMCard key={llm.id} llm={llm} index={index} />
             ))}
           </motion.div>
         )}
         
-        {filteredAndSortedLLMs.length === 0 && !loading && (
+        {stableSortedLLMs.length === 0 && !loading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

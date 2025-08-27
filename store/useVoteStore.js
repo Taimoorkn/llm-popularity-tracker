@@ -47,6 +47,9 @@ const useVoteStore = create((set, get) => ({
       
       set(serverData);
       
+      // Update rankings and stats after loading
+      get().updateRankings();
+      
       // Save to localStorage
       get().saveVotesToLocalStorage(serverData);
       
@@ -126,7 +129,7 @@ const useVoteStore = create((set, get) => ({
         
         set(serverState);
         
-        // Update rankings
+        // Update rankings and stats
         get().updateRankings();
         
         // Save updated state to localStorage
@@ -136,6 +139,9 @@ const useVoteStore = create((set, get) => ({
       console.error('Vote failed:', error);
       
       // Don't revert - keep the optimistic update as it's saved locally
+      // Update rankings even if server sync fails
+      get().updateRankings();
+      
       set({ 
         error: 'Failed to sync vote with server',
       });
@@ -153,7 +159,20 @@ const useVoteStore = create((set, get) => ({
       .sort((a, b) => b.count - a.count)
       .map((item, index) => ({ ...item, rank: index + 1 }));
     
-    set({ rankings });
+    // Calculate stats in real-time
+    const totalVotes = Object.values(votes).reduce((sum, count) => sum + Math.abs(count), 0);
+    const topModel = rankings[0]?.id || null;
+    const topModelName = topModel ? get().getLLMById(topModel)?.name || topModel : null;
+    
+    const updatedStats = {
+      ...get().stats,
+      totalVotes,
+      votesToday: totalVotes, // For now, treat all votes as today's votes
+      votesLastHour: totalVotes, // For now, treat all votes as last hour's votes  
+      topModel: topModelName,
+    };
+    
+    set({ rankings, stats: updatedStats });
   },
   
   // Fetch latest stats

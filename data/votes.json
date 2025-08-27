@@ -1,15 +1,15 @@
 {
   "votes": {
     "gpt-4o": 1,
-    "claude-3-5-sonnet": -1,
+    "claude-3-5-sonnet": 1,
     "gemini-ultra": -1,
     "llama-3-70b": -1,
     "mistral-large": -1,
-    "command-r-plus": -1,
+    "command-r-plus": 1,
     "grok": 1,
     "perplexity": -1,
     "qwen-2-5": -1,
-    "deepseek-coder": -1,
+    "deepseek-coder": 1,
     "phi-3": -1,
     "falcon-180b": -1,
     "vicuna-33b": -1,
@@ -17,21 +17,20 @@
     "yi-34b": -1,
     "mixtral-8x7b": -1,
     "bard": -1,
-    "ernie-4": -1,
+    "ernie-4": 1,
     "stablelm-2": -1,
     "inflection-2-5": -1
   },
   "userSessions": {
     "89f160926a37777b575ad591196385dd": {
-      "claude-3-5-sonnet": -1,
+      "claude-3-5-sonnet": 1,
       "gemini-ultra": -1,
       "llama-3-70b": -1,
       "mistral-large": -1,
-      "command-r-plus": -1,
       "grok": 1,
       "perplexity": -1,
       "qwen-2-5": -1,
-      "deepseek-coder": -1,
+      "deepseek-coder": 1,
       "phi-3": -1,
       "falcon-180b": -1,
       "vicuna-33b": -1,
@@ -39,14 +38,15 @@
       "yi-34b": -1,
       "mixtral-8x7b": -1,
       "bard": -1,
-      "ernie-4": -1,
+      "ernie-4": 1,
       "stablelm-2": -1,
       "inflection-2-5": -1,
+      "command-r-plus": 1,
       "gpt-4o": 1
     }
   },
   "stats": {
-    "totalVotes": 26,
+    "totalVotes": 39,
     "lastHourVotes": [
       {
         "llmId": "gpt-4o",
@@ -192,14 +192,89 @@
         "llmId": "grok",
         "voteType": 1,
         "timestamp": "2025-08-26T23:50:56.529Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:11:53.770Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": -1,
+        "timestamp": "2025-08-27T00:11:56.831Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:11:59.213Z"
+      },
+      {
+        "llmId": "command-r-plus",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:12:01.233Z"
+      },
+      {
+        "llmId": "command-r-plus",
+        "voteType": 0,
+        "timestamp": "2025-08-27T00:12:03.173Z"
+      },
+      {
+        "llmId": "command-r-plus",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:12:04.434Z"
+      },
+      {
+        "llmId": "deepseek-coder",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:12:16.846Z"
+      },
+      {
+        "llmId": "ernie-4",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:12:20.762Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": -1,
+        "timestamp": "2025-08-27T00:12:28.735Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:12:30.032Z"
+      },
+      {
+        "llmId": "gpt-4o",
+        "voteType": -1,
+        "timestamp": "2025-08-27T00:12:53.558Z"
+      },
+      {
+        "llmId": "gpt-4o",
+        "voteType": 0,
+        "timestamp": "2025-08-27T00:14:15.370Z"
+      },
+      {
+        "llmId": "gpt-4o",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:14:16.932Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": -1,
+        "timestamp": "2025-08-27T00:14:19.561Z"
+      },
+      {
+        "llmId": "claude-3-5-sonnet",
+        "voteType": 1,
+        "timestamp": "2025-08-27T00:14:22.294Z"
       }
     ],
     "dailyVotes": [
       [
         "Wed Aug 27 2025",
-        29
+        44
       ]
     ]
   },
-  "lastUpdated": "2025-08-26T23:50:56.529Z"
+  "lastUpdated": "2025-08-27T00:14:22.294Z"
 }
