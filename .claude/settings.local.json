@@ -8,7 +8,8 @@
       "WebSearch",
       "Bash(docker exec:*)",
       "Bash(docker-compose:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []
