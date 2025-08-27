@@ -1,15 +1,5 @@
-const { Pool } = require('pg');
-const path = require('path');
-
-// Database configuration
-const dbConfig = {
-  connectionString: process.env.DATABASE_URL || 'postgresql://llm_user:changeme@localhost:5432/llm_tracker',
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-};
-
-const pool = new Pool(dbConfig);
+import dbManager from '../lib/database.js';
+import logger from '../lib/logger.js';
 
 const migrations = [
   {
@@ -208,13 +198,11 @@ const migrations = [
 ];
 
 async function runMigrations() {
-  const client = await pool.connect();
-  
   try {
-    console.log('Starting database migrations...');
+    await dbManager.initialize();
     
     // Create migrations table
-    await client.query(`
+    await dbManager.query(`
       CREATE TABLE IF NOT EXISTS migrations (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL UNIQUE,
@@ -223,7 +211,7 @@ async function runMigrations() {
     `);
     
     // Get already executed migrations
-    const { rows: executedMigrations } = await client.query(
+    const { rows: executedMigrations } = await dbManager.query(
       'SELECT name FROM migrations ORDER BY id'
     );
     
@@ -232,38 +220,34 @@ async function runMigrations() {
     // Run pending migrations
     for (const migration of migrations) {
       if (!executedNames.includes(migration.name)) {
-        console.log(`Running migration: ${migration.name}`);
+        logger.info(`Running migration: ${migration.name}`);
         
-        // Start transaction
-        await client.query('BEGIN');
-        
-        try {
+        await dbManager.transaction(async (client) => {
           await client.query(migration.up);
           await client.query(
             'INSERT INTO migrations (name) VALUES ($1)',
             [migration.name]
           );
-          await client.query('COMMIT');
-          
-          console.log(`✓ Migration completed: ${migration.name}`);
-        } catch (error) {
-          await client.query('ROLLBACK');
-          throw error;
-        }
+        });
+        
+        logger.info(`Migration completed: ${migration.name}`);
       } else {
-        console.log(`✓ Migration already executed: ${migration.name}`);
+        logger.info(`Migration already executed: ${migration.name}`);
       }
     }
     
-    console.log('\nAll migrations completed successfully!');
+    logger.info('All migrations completed successfully');
   } catch (error) {
-    console.error('Migration failed:', error);
+    logger.error('Migration failed:', error);
     process.exit(1);
   } finally {
-    client.release();
-    await pool.end();
+    await dbManager.closeAll();
   }
 }
 
-// Run migrations
-runMigrations();
+// Run migrations if called directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runMigrations();
+}
+
+export { runMigrations, migrations };
