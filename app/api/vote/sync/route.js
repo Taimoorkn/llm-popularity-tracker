@@ -1,34 +1,48 @@
 import { NextResponse } from 'next/server';
-import { getVoteManager } from '@/lib/vote-manager';
+import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
+import { apiMiddleware, schemas, securityHeaders } from '@/lib/middleware';
+import logger from '@/lib/logger';
 
 export async function POST(request) {
-  try {
-    const { fingerprint } = await request.json();
-    
-    if (!fingerprint) {
-      return NextResponse.json(
-        { error: 'Fingerprint is required' },
-        { status: 400 }
-      );
+  // Apply middleware
+  const middlewareResult = await apiMiddleware(request, {
+    schema: schemas.sync,
+    rateLimit: {
+      maxRequests: 100,
+      windowMs: 60000 // 100 requests per minute
     }
+  });
+  
+  if (middlewareResult.status) {
+    return middlewareResult;
+  }
+  
+  const { validatedData, requestInfo, rateLimitHeaders } = middlewareResult;
+  
+  try {
+    const { fingerprint } = validatedData;
     
-    const voteManager = getVoteManager();
-    const votes = voteManager.getVotes();
-    const rankings = voteManager.getRankings();
-    const stats = voteManager.getStats();
-    const userVotes = voteManager.getUserVotes(fingerprint);
+    const voteManager = await getAdaptedVoteManager();
+    const syncData = await voteManager.syncUserVotes(fingerprint);
     
-    return NextResponse.json({
-      votes,
-      rankings,
-      stats,
-      userVotes,
-    });
+    logger.logResponse(requestInfo, { status: 200 });
+    
+    return NextResponse.json(
+      syncData,
+      {
+        headers: { ...securityHeaders(), ...rateLimitHeaders }
+      }
+    );
   } catch (error) {
-    console.error('Sync votes error:', error);
+    logger.error('Sync votes error:', error);
+    logger.logResponse(requestInfo, { status: 500 }, error);
+    
     return NextResponse.json(
       { error: 'Failed to sync votes' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: { ...securityHeaders(), ...rateLimitHeaders }
+      }
     );
   }
 }

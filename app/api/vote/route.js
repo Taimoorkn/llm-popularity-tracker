@@ -1,62 +1,135 @@
 import { NextResponse } from 'next/server';
-import { getVoteManager } from '@/lib/vote-manager';
+import { getAdaptedVoteManager } from '@/lib/vote-manager-wrapper';
+import { apiMiddleware, schemas, detectFraud, securityHeaders } from '@/lib/middleware';
+import logger from '@/lib/logger';
 
 export async function POST(request) {
+  // Apply middleware
+  const middlewareResult = await apiMiddleware(request, {
+    schema: schemas.vote,
+    rateLimit: {
+      maxRequests: 60,
+      windowMs: 60000 // 60 requests per minute
+    }
+  });
+  
+  if (middlewareResult.status) {
+    // Middleware returned an error response
+    return middlewareResult;
+  }
+  
+  const { validatedData, requestInfo, rateLimitHeaders } = middlewareResult;
+  
   try {
-    const { fingerprint, llmId, voteType } = await request.json();
+    const { fingerprint, llmId, voteType } = validatedData;
     
-    if (!fingerprint) {
+    // Fraud detection
+    const fraudCheck = await detectFraud(fingerprint, 'vote', {
+      llmId,
+      voteType
+    });
+    
+    if (fraudCheck.isSuspicious && fraudCheck.riskScore > 50) {
+      logger.business.fraudulentVoteDetected(
+        fingerprint,
+        'High risk score',
+        fraudCheck
+      );
+      
       return NextResponse.json(
-        { error: 'Fingerprint is required' },
-        { status: 400 }
+        { error: 'Suspicious activity detected. Please try again later.' },
+        { status: 429 }
       );
     }
     
-    // Process vote using fingerprint
-    const voteManager = getVoteManager();
-    const result = voteManager.vote(fingerprint, llmId, voteType);
+    // Process vote using database
+    const voteManager = await getAdaptedVoteManager();
+    const result = await voteManager.vote(fingerprint, llmId, voteType, {
+      ip: requestInfo.ip,
+      userAgent: requestInfo.userAgent
+    });
     
     if (!result.success) {
       return NextResponse.json(
         { error: result.error },
-        { status: 400 }
+        { status: 400, headers: { ...securityHeaders(), ...rateLimitHeaders } }
       );
     }
     
-    return NextResponse.json({
-      success: true,
-      votes: result.votes,
-      userVote: result.userVote,
-      previousVote: result.previousVote,
-    });
+    // Log successful vote
+    logger.logResponse(requestInfo, { status: 200 });
+    
+    return NextResponse.json(
+      {
+        success: true,
+        votes: result.votes,
+        userVote: result.userVote,
+        previousVote: result.previousVote,
+      },
+      { 
+        status: 200,
+        headers: { ...securityHeaders(), ...rateLimitHeaders }
+      }
+    );
   } catch (error) {
-    console.error('Vote error:', error);
+    logger.error('Vote error:', error);
+    logger.logResponse(requestInfo, { status: 500 }, error);
+    
     return NextResponse.json(
       { error: 'Failed to process vote' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: { ...securityHeaders(), ...rateLimitHeaders }
+      }
     );
   }
 }
 
 // This endpoint is deprecated - use POST /api/vote/sync instead
-export async function GET() {
+export async function GET(request) {
+  // Apply middleware
+  const middlewareResult = await apiMiddleware(request, {
+    rateLimit: {
+      maxRequests: 100,
+      windowMs: 60000 // 100 requests per minute
+    }
+  });
+  
+  if (middlewareResult.status) {
+    return middlewareResult;
+  }
+  
+  const { requestInfo, rateLimitHeaders } = middlewareResult;
+  
   try {
-    const voteManager = getVoteManager();
-    const votes = voteManager.getVotes();
-    const rankings = voteManager.getRankings();
-    const stats = voteManager.getStats();
+    const voteManager = await getAdaptedVoteManager();
+    const votes = await voteManager.getVotes();
+    const rankings = await voteManager.getRankings();
+    const stats = await voteManager.getStats();
     
-    return NextResponse.json({
-      votes,
-      rankings,
-      stats,
-      userVotes: {},
-    });
+    logger.logResponse(requestInfo, { status: 200 });
+    
+    return NextResponse.json(
+      {
+        votes,
+        rankings,
+        stats,
+        userVotes: {},
+      },
+      {
+        headers: { ...securityHeaders(), ...rateLimitHeaders }
+      }
+    );
   } catch (error) {
-    console.error('Get votes error:', error);
+    logger.error('Get votes error:', error);
+    logger.logResponse(requestInfo, { status: 500 }, error);
+    
     return NextResponse.json(
       { error: 'Failed to get votes' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: { ...securityHeaders(), ...rateLimitHeaders }
+      }
     );
   }
 }
