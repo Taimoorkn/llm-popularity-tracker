@@ -5,7 +5,8 @@
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
       "Bash(npx tailwindcss init:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(docker exec:*)"
     ],
     "deny": [],
     "ask": []
