@@ -1,8 +1,9 @@
--- Supabase Schema for LLM Popularity Tracker
--- Run this in Supabase SQL Editor after creating your project
+-- ============================================
+-- STEP 2: CREATE CORE TABLES
+-- ============================================
 
 -- Create LLMs table
-CREATE TABLE IF NOT EXISTS llms (
+CREATE TABLE llms (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   company TEXT NOT NULL,
@@ -16,7 +17,7 @@ CREATE TABLE IF NOT EXISTS llms (
 );
 
 -- Create votes table with fingerprint-based voting
-CREATE TABLE IF NOT EXISTS votes (
+CREATE TABLE votes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   llm_id TEXT NOT NULL REFERENCES llms(id) ON DELETE CASCADE,
   fingerprint TEXT NOT NULL,
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS votes (
 );
 
 -- Create sessions table for tracking users
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   fingerprint TEXT UNIQUE NOT NULL,
   ip_address TEXT,
@@ -39,8 +40,42 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create view for real-time vote counts
-CREATE OR REPLACE VIEW vote_counts AS
+-- ============================================
+-- STEP 3: CREATE AGGREGATE TABLES
+-- ============================================
+
+-- Create aggregated stats table (updates every 5 seconds)
+CREATE TABLE vote_stats_aggregate (
+  llm_id TEXT PRIMARY KEY,
+  total_votes INTEGER DEFAULT 0,
+  upvotes INTEGER DEFAULT 0,
+  downvotes INTEGER DEFAULT 0,
+  unique_voters INTEGER DEFAULT 0,
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create global stats table
+CREATE TABLE global_stats (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  total_votes INTEGER DEFAULT 0,
+  unique_voters INTEGER DEFAULT 0,
+  votes_last_hour INTEGER DEFAULT 0,
+  votes_today INTEGER DEFAULT 0,
+  top_model TEXT,
+  top_model_votes INTEGER DEFAULT 0,
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CHECK (id = 1)
+);
+
+-- Initialize global stats row
+INSERT INTO global_stats (id) VALUES (1);
+
+-- ============================================
+-- STEP 4: CREATE VIEWS
+-- ============================================
+
+-- Create view for backward compatibility
+CREATE VIEW vote_counts AS
 SELECT 
   l.id as llm_id,
   l.name,
@@ -54,7 +89,63 @@ LEFT JOIN votes v ON l.id = v.llm_id
 GROUP BY l.id, l.name, l.company
 ORDER BY total_votes DESC;
 
--- Create function to handle vote updates
+-- ============================================
+-- STEP 5: CREATE FUNCTIONS
+-- ============================================
+
+-- Function to update aggregates (called periodically)
+CREATE OR REPLACE FUNCTION update_vote_aggregates() 
+RETURNS void 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Update per-LLM stats
+  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
+  SELECT 
+    l.id as llm_id,
+    COALESCE(SUM(v.vote_type), 0) as total_votes,
+    COALESCE(COUNT(CASE WHEN v.vote_type = 1 THEN 1 END), 0) as upvotes,
+    COALESCE(COUNT(CASE WHEN v.vote_type = -1 THEN 1 END), 0) as downvotes,
+    COALESCE(COUNT(DISTINCT v.fingerprint), 0) as unique_voters
+  FROM llms l
+  LEFT JOIN votes v ON l.id = v.llm_id
+  GROUP BY l.id
+  ON CONFLICT (llm_id) DO UPDATE SET
+    total_votes = EXCLUDED.total_votes,
+    upvotes = EXCLUDED.upvotes,
+    downvotes = EXCLUDED.downvotes,
+    unique_voters = EXCLUDED.unique_voters,
+    last_updated = NOW();
+    
+  -- Update global stats
+  UPDATE global_stats SET
+    total_votes = (SELECT COUNT(*) FROM votes),
+    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes),
+    votes_last_hour = (
+      SELECT COUNT(*) FROM votes 
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+    ),
+    votes_today = (
+      SELECT COUNT(*) FROM votes 
+      WHERE created_at > CURRENT_DATE
+    ),
+    top_model = (
+      SELECT llm_id FROM vote_stats_aggregate 
+      ORDER BY total_votes DESC 
+      LIMIT 1
+    ),
+    top_model_votes = (
+      SELECT total_votes FROM vote_stats_aggregate 
+      ORDER BY total_votes DESC 
+      LIMIT 1
+    ),
+    last_updated = NOW()
+  WHERE id = 1;
+END;
+$$;
+
+-- Function to handle vote updates with aggregate optimization
 CREATE OR REPLACE FUNCTION handle_vote(
   p_llm_id TEXT,
   p_fingerprint TEXT,
@@ -80,13 +171,19 @@ BEGIN
     );
   END IF;
   
-  -- Insert or update vote
-  INSERT INTO votes (llm_id, fingerprint, vote_type, ip_address, user_agent)
-  VALUES (p_llm_id, p_fingerprint, p_vote_type, p_ip_address, p_user_agent)
-  ON CONFLICT (llm_id, fingerprint)
-  DO UPDATE SET 
-    vote_type = EXCLUDED.vote_type,
-    updated_at = NOW();
+  -- Handle vote deletion (vote_type = 0)
+  IF p_vote_type = 0 THEN
+    DELETE FROM votes 
+    WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint;
+  ELSE
+    -- Insert or update vote
+    INSERT INTO votes (llm_id, fingerprint, vote_type, ip_address, user_agent)
+    VALUES (p_llm_id, p_fingerprint, p_vote_type, p_ip_address, p_user_agent)
+    ON CONFLICT (llm_id, fingerprint)
+    DO UPDATE SET 
+      vote_type = EXCLUDED.vote_type,
+      updated_at = NOW();
+  END IF;
   
   -- Update session activity
   INSERT INTO sessions (fingerprint, ip_address, user_agent, vote_count)
@@ -96,19 +193,36 @@ BEGIN
     vote_count = sessions.vote_count + 1,
     last_activity = NOW();
   
-  -- Return success with vote counts
+  -- Update aggregate for this specific LLM immediately
+  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
+  SELECT 
+    p_llm_id,
+    COALESCE(SUM(vote_type), 0),
+    COUNT(CASE WHEN vote_type = 1 THEN 1 END),
+    COUNT(CASE WHEN vote_type = -1 THEN 1 END),
+    COUNT(DISTINCT fingerprint)
+  FROM votes
+  WHERE llm_id = p_llm_id
+  ON CONFLICT (llm_id) DO UPDATE SET
+    total_votes = (SELECT COALESCE(SUM(vote_type), 0) FROM votes WHERE llm_id = p_llm_id),
+    upvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = 1),
+    downvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = -1),
+    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes WHERE llm_id = p_llm_id),
+    last_updated = NOW();
+  
+  -- Return success with vote counts from aggregate table
   SELECT json_build_object(
     'success', true,
     'previous_vote', v_previous_vote,
     'new_vote', p_vote_type,
-    'vote_count', (SELECT total_votes FROM vote_counts WHERE llm_id = p_llm_id)
+    'vote_count', (SELECT total_votes FROM vote_stats_aggregate WHERE llm_id = p_llm_id)
   ) INTO v_result;
   
   RETURN v_result;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create function to get user votes
+-- Function to get user votes
 CREATE OR REPLACE FUNCTION get_user_votes(p_fingerprint TEXT)
 RETURNS JSON AS $$
 BEGIN
@@ -118,15 +232,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Enable Row Level Security
+-- ============================================
+-- STEP 6: ENABLE ROW LEVEL SECURITY
+-- ============================================
+
+ALTER TABLE llms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE llms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vote_stats_aggregate ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_stats ENABLE ROW LEVEL SECURITY;
 
--- Create policies for public access
+-- ============================================
+-- STEP 7: CREATE POLICIES
+-- ============================================
+
+-- LLMs policies
 CREATE POLICY "Public can read LLMs" ON llms
   FOR SELECT USING (true);
 
+-- Votes policies  
 CREATE POLICY "Public can read votes" ON votes
   FOR SELECT USING (true);
 
@@ -136,22 +260,46 @@ CREATE POLICY "Public can insert votes" ON votes
 CREATE POLICY "Public can update own votes" ON votes
   FOR UPDATE USING (true);
 
+CREATE POLICY "Public can delete votes" ON votes
+  FOR DELETE USING (true);
+
+-- Sessions policies
 CREATE POLICY "Public can read sessions" ON sessions
   FOR SELECT USING (true);
 
 CREATE POLICY "Public can insert/update sessions" ON sessions
   FOR ALL USING (true);
 
--- Enable Realtime for tables (only votes table, not views)
-ALTER PUBLICATION supabase_realtime ADD TABLE votes;
+-- Aggregate tables policies
+CREATE POLICY "Public can read vote aggregates" ON vote_stats_aggregate
+  FOR SELECT USING (true);
 
--- Create indexes for performance
+CREATE POLICY "Public can read global stats" ON global_stats
+  FOR SELECT USING (true);
+
+-- ============================================
+-- STEP 8: CREATE INDEXES
+-- ============================================
+
 CREATE INDEX idx_votes_llm_id ON votes(llm_id);
 CREATE INDEX idx_votes_fingerprint ON votes(fingerprint);
 CREATE INDEX idx_votes_created_at ON votes(created_at DESC);
 CREATE INDEX idx_sessions_fingerprint ON sessions(fingerprint);
+CREATE INDEX idx_vote_stats_aggregate_total_votes ON vote_stats_aggregate(total_votes DESC);
+CREATE INDEX idx_vote_stats_aggregate_last_updated ON vote_stats_aggregate(last_updated DESC);
 
--- Insert initial LLM data
+-- ============================================
+-- STEP 9: CONFIGURE REALTIME
+-- ============================================
+
+-- Enable Realtime for aggregate tables only (not votes table for performance)
+ALTER PUBLICATION supabase_realtime ADD TABLE vote_stats_aggregate;
+ALTER PUBLICATION supabase_realtime ADD TABLE global_stats;
+
+-- ============================================
+-- STEP 10: INSERT LLM DATA
+-- ============================================
+
 INSERT INTO llms (id, name, company, description, logo, image, color, release_year, use_cases) VALUES
 ('gpt-4o', 'GPT-4o', 'OpenAI', 'Most advanced multimodal AI with vision, analysis, and coding capabilities', '🤖', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/200px-OpenAI_Logo.svg.png', 'from-green-500 to-emerald-600', 2024, ARRAY['General purpose', 'Code generation', 'Creative writing', 'Vision tasks']),
 ('claude-3-5-sonnet', 'Claude 3.5 Sonnet', 'Anthropic', 'Balanced model excelling at analysis, coding, and nuanced conversation', '🧠', 'https://www.anthropic.com/_next/static/media/claude-logo.2f5f0b53.svg', 'from-orange-500 to-amber-600', 2024, ARRAY['Code analysis', 'Research', 'Writing', 'Complex reasoning']),
@@ -172,5 +320,28 @@ INSERT INTO llms (id, name, company, description, logo, image, color, release_ye
 ('stablelm-2', 'StableLM 2', 'Stability AI', 'Open model optimized for transparency and customization', '🏔️', 'https://github.com/stability-ai.png', 'from-indigo-500 to-purple-600', 2024, ARRAY['Open weights', 'Research friendly', 'Customization', 'Transparency']),
 ('internlm-2', 'InternLM 2', 'Shanghai AI Lab', 'Chinese model with strong reasoning and tool use', '🌐', 'https://github.com/internlm.png', 'from-blue-500 to-green-600', 2024, ARRAY['Tool use', 'Chinese tasks', 'Mathematical reasoning', 'Code']),
 ('wizardlm-2', 'WizardLM 2', 'Microsoft', 'Instruction-following model with complex reasoning', '🧙', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png', 'from-purple-500 to-pink-600', 2024, ARRAY['Instructions', 'Complex tasks', 'Step-by-step', 'Education']),
-('openchat-3-5', 'OpenChat 3.5', 'OpenChat', 'Community model achieving GPT-3.5 level performance', '💬', 'https://github.com/imoneoi.png', 'from-green-500 to-blue-600', 2024, ARRAY['Open source', 'Chat optimization', 'Community driven', 'Efficient'])
-ON CONFLICT (id) DO NOTHING;
+('openchat-3-5', 'OpenChat 3.5', 'OpenChat', 'Community model achieving GPT-3.5 level performance', '💬', 'https://github.com/imoneoi.png', 'from-green-500 to-blue-600', 2024, ARRAY['Open source', 'Chat optimization', 'Community driven', 'Efficient']);
+
+-- ============================================
+-- STEP 11: INITIALIZE AGGREGATES
+-- ============================================
+
+-- Run initial population of aggregates
+SELECT update_vote_aggregates();
+
+-- ============================================
+-- DONE! 
+-- ============================================
+
+DO $$ 
+BEGIN
+  RAISE NOTICE 'Fresh installation completed successfully!';
+  RAISE NOTICE 'Tables created: llms, votes, sessions, vote_stats_aggregate, global_stats';
+  RAISE NOTICE 'Functions created: handle_vote, get_user_votes, update_vote_aggregates';
+  RAISE NOTICE 'Realtime enabled for: vote_stats_aggregate, global_stats';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Next steps:';
+  RAISE NOTICE '1. Test voting: SELECT handle_vote(''gpt-4o'', ''test-fingerprint'', 1);';
+  RAISE NOTICE '2. Check aggregates: SELECT * FROM vote_stats_aggregate;';
+  RAISE NOTICE '3. Set up cron job to run: SELECT update_vote_aggregates();';
+END $$;

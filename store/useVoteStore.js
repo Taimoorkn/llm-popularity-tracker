@@ -45,21 +45,34 @@ const useVoteStore = create((set, get) => ({
           lastUpdate: new Date(),
         });
         
-        // Initialize real-time subscriptions
+        // Initialize real-time subscriptions with optimized partial updates
         const realtimeSuccess = await voteManager.initializeRealtime(
-          // On vote update
-          (voteCounts) => {
-            console.log('📡 Real-time vote update received');
+          // Partial vote update - only update the specific LLM that changed
+          (voteUpdate) => {
+            console.log('📡 Real-time aggregate update for:', voteUpdate.llmId);
+            const currentVotes = get().votes;
             set({ 
-              votes: voteCounts,
+              votes: {
+                ...currentVotes,
+                [voteUpdate.llmId]: voteUpdate.votes
+              },
               lastUpdate: new Date()
             });
             get().updateRankings();
           },
-          // On stats update
-          (stats) => {
-            console.log('📊 Real-time stats update received');
-            set({ stats });
+          // Global stats update
+          (statsUpdate) => {
+            console.log('📊 Real-time global stats update');
+            set({ 
+              stats: {
+                totalVotes: statsUpdate.totalVotes || 0,
+                uniqueVoters: statsUpdate.uniqueVoters || 0,
+                votesLastHour: statsUpdate.votesLastHour || 0,
+                votesToday: statsUpdate.votesToday || 0,
+                topModel: statsUpdate.topModel,
+                topModelVotes: statsUpdate.topModelVotes || 0
+              }
+            });
           }
         );
         
