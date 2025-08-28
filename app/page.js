@@ -8,6 +8,7 @@ import Header from '@/components/Header';
 import LLMCard from '@/components/LLMCard';
 import StatsPanel from '@/components/StatsPanel';
 import VoteChart from '@/components/VoteChart';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import useVoteStore from '@/store/useVoteStore';
 
 export default function Home() {
@@ -122,7 +123,12 @@ export default function Home() {
         </motion.div>
         
         {/* Stats Panel */}
-        <StatsPanel />
+        <ErrorBoundary 
+          title="Stats unavailable" 
+          message="Unable to load statistics. Voting still works!"
+        >
+          <StatsPanel />
+        </ErrorBoundary>
         
         {/* Controls */}
         <div className="flex flex-col md:flex-row gap-3 mb-6">
@@ -151,9 +157,14 @@ export default function Home() {
         </div>
         
         {/* Chart */}
-        <div className="mb-8">
-          <VoteChart />
-        </div>
+        <ErrorBoundary 
+          title="Chart unavailable"
+          message="Unable to display the voting chart."
+        >
+          <div className="mb-8">
+            <VoteChart />
+          </div>
+        </ErrorBoundary>
         
         {/* LLM Grid */}
         {loading ? (
@@ -182,7 +193,23 @@ export default function Home() {
                     delay: index * 0.02
                   }}
                 >
-                  <LLMCard llm={llm} index={index} />
+                  <ErrorBoundary
+                    title="Card error"
+                    message={`Unable to display ${llm.name}`}
+                    fallback={(error, reset) => (
+                      <div className="bg-card/50 border border-red-500/20 rounded-lg p-4 text-center">
+                        <p className="text-xs text-muted-foreground mb-2">Error loading {llm.name}</p>
+                        <button 
+                          onClick={reset}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                  >
+                    <LLMCard llm={llm} index={index} />
+                  </ErrorBoundary>
                 </motion.div>
               ))}
             </AnimatePresence>

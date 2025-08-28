@@ -35,88 +35,6 @@ export async function GET() {
   }
 }
 
-// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\globals.css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-  }
-
-  * {
-    @apply border-border;
-  }
-  
-  /* Typography System */
-  .font-inter {
-    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
-  }
-  
-  .font-sora {
-    font-family: var(--font-sora), system-ui, -apple-system, sans-serif;
-  }
-  
-  .font-mono {
-    font-family: var(--font-mono), 'Courier New', monospace;
-  }
-  
-  /* Heading styles with lighter weights */
-  h1 {
-    @apply font-sora font-light tracking-tight;
-  }
-  
-  h2 {
-    @apply font-sora font-normal tracking-tight;
-  }
-  
-  h3 {
-    @apply font-inter font-medium;
-  }
-  
-  p, span, div {
-    @apply font-inter font-light;
-  }
-}
-
-@layer utilities {
-  .text-gradient {
-    @apply bg-gradient-to-r from-primary via-accent to-success bg-clip-text text-transparent;
-  }
-
-  .glow {
-    @apply shadow-lg shadow-primary/20;
-  }
-
-  .card-glow {
-    @apply hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300;
-  }
-
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: #4b5563 #1f2937;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-gray-800 rounded-full;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-gray-600 rounded-full hover:bg-gray-500;
-  }
-}
-
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\layout.js
 import { Inter, Sora, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
@@ -168,6 +86,7 @@ import Header from '@/components/Header';
 import LLMCard from '@/components/LLMCard';
 import StatsPanel from '@/components/StatsPanel';
 import VoteChart from '@/components/VoteChart';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import useVoteStore from '@/store/useVoteStore';
 
 export default function Home() {
@@ -282,7 +201,12 @@ export default function Home() {
         </motion.div>
         
         {/* Stats Panel */}
-        <StatsPanel />
+        <ErrorBoundary 
+          title="Stats unavailable" 
+          message="Unable to load statistics. Voting still works!"
+        >
+          <StatsPanel />
+        </ErrorBoundary>
         
         {/* Controls */}
         <div className="flex flex-col md:flex-row gap-3 mb-6">
@@ -311,9 +235,14 @@ export default function Home() {
         </div>
         
         {/* Chart */}
-        <div className="mb-8">
-          <VoteChart />
-        </div>
+        <ErrorBoundary 
+          title="Chart unavailable"
+          message="Unable to display the voting chart."
+        >
+          <div className="mb-8">
+            <VoteChart />
+          </div>
+        </ErrorBoundary>
         
         {/* LLM Grid */}
         {loading ? (
@@ -342,7 +271,23 @@ export default function Home() {
                     delay: index * 0.02
                   }}
                 >
-                  <LLMCard llm={llm} index={index} />
+                  <ErrorBoundary
+                    title="Card error"
+                    message={`Unable to display ${llm.name}`}
+                    fallback={(error, reset) => (
+                      <div className="bg-card/50 border border-red-500/20 rounded-lg p-4 text-center">
+                        <p className="text-xs text-muted-foreground mb-2">Error loading {llm.name}</p>
+                        <button 
+                          onClick={reset}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                  >
+                    <LLMCard llm={llm} index={index} />
+                  </ErrorBoundary>
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -376,6 +321,90 @@ export default function Home() {
     </div>
   );
 }
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\components\ErrorBoundary.jsx
+'use client';
+
+import { Component } from 'react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+    this.setState({
+      error: error,
+      errorInfo: errorInfo
+    });
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    // Optionally reload the page
+    if (this.props.fallbackAction === 'reload') {
+      window.location.reload();
+    }
+  };
+
+  render() {
+    if (this.state.hasError) {
+      // Custom fallback UI
+      if (this.props.fallback) {
+        return this.props.fallback(this.state.error, this.handleReset);
+      }
+
+      // Default fallback UI
+      return (
+        <div className="min-h-[400px] flex items-center justify-center p-6">
+          <div className="bg-card border border-red-500/20 rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertCircle className="text-red-500" size={24} />
+              <h2 className="text-lg font-semibold text-foreground">
+                {this.props.title || 'Something went wrong'}
+              </h2>
+            </div>
+            
+            <p className="text-sm text-muted-foreground mb-4">
+              {this.props.message || 'An unexpected error occurred. Please try refreshing the page.'}
+            </p>
+            
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <details className="mb-4">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                  Error details
+                </summary>
+                <pre className="mt-2 text-xs bg-black/20 p-2 rounded overflow-auto max-h-32">
+                  {this.state.error.toString()}
+                  {this.state.errorInfo?.componentStack}
+                </pre>
+              </details>
+            )}
+            
+            <button
+              onClick={this.handleReset}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors text-sm"
+            >
+              <RefreshCw size={16} />
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+export default ErrorBoundary;
 
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\components\Header.jsx
 'use client';
@@ -1169,11 +1198,32 @@ class SupabaseVoteManager {
   constructor() {
     this.channel = null
     this.subscriptions = new Map()
+    this.retryCount = 0
+    this.maxRetries = 5
+    this.retryDelay = 1000 // Start with 1 second
+    this.isConnecting = false
+    this.connectionCallbacks = null
   }
 
-  // Initialize optimized realtime subscriptions (only aggregates, not individual votes)
+  // Initialize optimized realtime subscriptions with retry logic
   async initializeRealtime(onVoteUpdate, onStatsUpdate) {
+    // Store callbacks for retry attempts
+    this.connectionCallbacks = { onVoteUpdate, onStatsUpdate }
+    
+    // Prevent multiple simultaneous connection attempts
+    if (this.isConnecting) {
+      console.log('🔄 Connection already in progress...')
+      return false
+    }
+    
+    this.isConnecting = true
+    
     try {
+      // Clean up any existing channel
+      if (this.channel) {
+        await this.cleanup()
+      }
+      
       this.channel = supabase
         .channel('optimized-votes')
         // Listen to aggregate updates only (much fewer events)
@@ -1214,13 +1264,58 @@ class SupabaseVoteManager {
         })
         .subscribe((status) => {
           console.log('✅ Realtime subscription status:', status)
+          
+          if (status === 'SUBSCRIBED') {
+            // Reset retry count on successful connection
+            this.retryCount = 0
+            this.retryDelay = 1000
+            this.isConnecting = false
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            // Trigger retry on connection failure
+            this.handleConnectionError()
+          }
         })
 
+      // Set up a timeout to detect connection failures
+      setTimeout(() => {
+        if (this.isConnecting) {
+          console.warn('⚠️ Connection timeout, attempting retry...')
+          this.handleConnectionError()
+        }
+      }, 10000) // 10 second timeout
+
+      this.isConnecting = false
       return true
     } catch (error) {
       console.error('❌ Failed to initialize realtime:', error)
+      this.isConnecting = false
+      this.handleConnectionError()
       return false
     }
+  }
+  
+  // Handle connection errors with exponential backoff
+  async handleConnectionError() {
+    this.isConnecting = false
+    
+    if (this.retryCount >= this.maxRetries) {
+      console.error('🛑 Max retries reached, giving up on realtime connection')
+      return
+    }
+    
+    this.retryCount++
+    const delay = Math.min(this.retryDelay * Math.pow(2, this.retryCount - 1), 30000) // Max 30 seconds
+    
+    console.log(`🔄 Retrying connection in ${delay/1000}s (attempt ${this.retryCount}/${this.maxRetries})`)
+    
+    setTimeout(() => {
+      if (this.connectionCallbacks) {
+        this.initializeRealtime(
+          this.connectionCallbacks.onVoteUpdate,
+          this.connectionCallbacks.onStatsUpdate
+        )
+      }
+    }, delay)
   }
 
   // Submit or update a vote
@@ -1449,6 +1544,24 @@ class SupabaseVoteManager {
       this.channel = null
     }
     this.subscriptions.clear()
+    this.retryCount = 0
+    this.isConnecting = false
+    this.connectionCallbacks = null
+  }
+  
+  // Manual reconnect method
+  async reconnect() {
+    console.log('🔄 Manual reconnect requested')
+    this.retryCount = 0
+    this.retryDelay = 1000
+    
+    if (this.connectionCallbacks) {
+      return this.initializeRealtime(
+        this.connectionCallbacks.onVoteUpdate,
+        this.connectionCallbacks.onStatsUpdate
+      )
+    }
+    return false
   }
 }
 
@@ -1480,6 +1593,8 @@ const useVoteStore = create((set, get) => ({
   lastUpdate: null,
   fingerprint: null,
   realtimeConnected: false,
+  lastVoteTime: 0,
+  voteThrottleMs: 2000, // 2 second throttle between votes
   
   // Initialize votes and real-time connection
   initializeVotes: async () => {
@@ -1567,6 +1682,19 @@ const useVoteStore = create((set, get) => ({
       return;
     }
     
+    // Check rate limiting
+    const now = Date.now();
+    const timeSinceLastVote = now - get().lastVoteTime;
+    const throttleMs = get().voteThrottleMs;
+    
+    if (timeSinceLastVote < throttleMs) {
+      const waitTime = Math.ceil((throttleMs - timeSinceLastVote) / 1000);
+      set({ error: `Please wait ${waitTime} second${waitTime > 1 ? 's' : ''} between votes` });
+      setTimeout(() => set({ error: null }), 2000);
+      console.log(`Rate limited: ${timeSinceLastVote}ms since last vote, need ${throttleMs}ms`);
+      return;
+    }
+    
     const currentUserVote = get().userVotes[llmId] || 0;
     
     // Don't vote if it's the same
@@ -1574,6 +1702,9 @@ const useVoteStore = create((set, get) => ({
       console.log('Same vote, ignoring');
       return;
     }
+    
+    // Update last vote time
+    set({ lastVoteTime: now });
     
     // Optimistic update
     const optimisticVotes = { ...get().votes };
@@ -1745,395 +1876,3 @@ const useVoteStore = create((set, get) => ({
 
 export default useVoteStore;
 
-// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\supabase\schema.sql
--- ============================================
--- STEP 2: CREATE CORE TABLES
--- ============================================
-
--- Create LLMs table
-CREATE TABLE llms (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  company TEXT NOT NULL,
-  description TEXT,
-  logo TEXT,
-  image TEXT,
-  color TEXT,
-  release_year INTEGER,
-  use_cases TEXT[],
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create votes table with fingerprint-based voting
-CREATE TABLE votes (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  llm_id TEXT NOT NULL REFERENCES llms(id) ON DELETE CASCADE,
-  fingerprint TEXT NOT NULL,
-  vote_type INTEGER NOT NULL CHECK (vote_type IN (-1, 1)),
-  ip_address TEXT,
-  user_agent TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(llm_id, fingerprint)
-);
-
--- Create sessions table for tracking users
-CREATE TABLE sessions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  fingerprint TEXT UNIQUE NOT NULL,
-  ip_address TEXT,
-  user_agent TEXT,
-  vote_count INTEGER DEFAULT 0,
-  last_activity TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- ============================================
--- STEP 3: CREATE AGGREGATE TABLES
--- ============================================
-
--- Create aggregated stats table (updates every 5 seconds)
-CREATE TABLE vote_stats_aggregate (
-  llm_id TEXT PRIMARY KEY,
-  total_votes INTEGER DEFAULT 0,
-  upvotes INTEGER DEFAULT 0,
-  downvotes INTEGER DEFAULT 0,
-  unique_voters INTEGER DEFAULT 0,
-  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create global stats table
-CREATE TABLE global_stats (
-  id INTEGER PRIMARY KEY DEFAULT 1,
-  total_votes INTEGER DEFAULT 0,
-  unique_voters INTEGER DEFAULT 0,
-  votes_last_hour INTEGER DEFAULT 0,
-  votes_today INTEGER DEFAULT 0,
-  top_model TEXT,
-  top_model_votes INTEGER DEFAULT 0,
-  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  CHECK (id = 1)
-);
-
--- Initialize global stats row
-INSERT INTO global_stats (id) VALUES (1);
-
--- ============================================
--- STEP 4: CREATE VIEWS
--- ============================================
-
--- Create view for backward compatibility
-CREATE VIEW vote_counts AS
-SELECT 
-  l.id as llm_id,
-  l.name,
-  l.company,
-  COALESCE(SUM(v.vote_type), 0) as total_votes,
-  COUNT(CASE WHEN v.vote_type = 1 THEN 1 END) as upvotes,
-  COUNT(CASE WHEN v.vote_type = -1 THEN 1 END) as downvotes,
-  COUNT(DISTINCT v.fingerprint) as unique_voters
-FROM llms l
-LEFT JOIN votes v ON l.id = v.llm_id
-GROUP BY l.id, l.name, l.company
-ORDER BY total_votes DESC;
-
--- ============================================
--- STEP 5: CREATE FUNCTIONS
--- ============================================
-
--- Function to update aggregates (called periodically)
-CREATE OR REPLACE FUNCTION update_vote_aggregates() 
-RETURNS void 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  -- Update per-LLM stats
-  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
-  SELECT 
-    l.id as llm_id,
-    COALESCE(SUM(v.vote_type), 0) as total_votes,
-    COALESCE(COUNT(CASE WHEN v.vote_type = 1 THEN 1 END), 0) as upvotes,
-    COALESCE(COUNT(CASE WHEN v.vote_type = -1 THEN 1 END), 0) as downvotes,
-    COALESCE(COUNT(DISTINCT v.fingerprint), 0) as unique_voters
-  FROM llms l
-  LEFT JOIN votes v ON l.id = v.llm_id
-  GROUP BY l.id
-  ON CONFLICT (llm_id) DO UPDATE SET
-    total_votes = EXCLUDED.total_votes,
-    upvotes = EXCLUDED.upvotes,
-    downvotes = EXCLUDED.downvotes,
-    unique_voters = EXCLUDED.unique_voters,
-    last_updated = NOW();
-    
-  -- Update global stats
-  UPDATE global_stats SET
-    total_votes = (SELECT COUNT(*) FROM votes),
-    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes),
-    votes_last_hour = (
-      SELECT COUNT(*) FROM votes 
-      WHERE created_at > NOW() - INTERVAL '1 hour'
-    ),
-    votes_today = (
-      SELECT COUNT(*) FROM votes 
-      WHERE created_at > CURRENT_DATE
-    ),
-    top_model = (
-      SELECT llm_id FROM vote_stats_aggregate 
-      ORDER BY total_votes DESC 
-      LIMIT 1
-    ),
-    top_model_votes = (
-      SELECT total_votes FROM vote_stats_aggregate 
-      ORDER BY total_votes DESC 
-      LIMIT 1
-    ),
-    last_updated = NOW()
-  WHERE id = 1;
-END;
-$$;
-
--- Function to handle vote updates with aggregate optimization
-CREATE OR REPLACE FUNCTION handle_vote(
-  p_llm_id TEXT,
-  p_fingerprint TEXT,
-  p_vote_type INTEGER,
-  p_ip_address TEXT DEFAULT NULL,
-  p_user_agent TEXT DEFAULT NULL
-) RETURNS JSON AS $$
-DECLARE
-  v_previous_vote INTEGER;
-  v_result JSON;
-BEGIN
-  -- Get previous vote if exists
-  SELECT vote_type INTO v_previous_vote
-  FROM votes
-  WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint;
-  
-  -- If same vote, do nothing
-  IF v_previous_vote = p_vote_type THEN
-    RETURN json_build_object(
-      'success', false,
-      'message', 'Vote unchanged',
-      'previous_vote', v_previous_vote
-    );
-  END IF;
-  
-  -- Handle vote deletion (vote_type = 0)
-  IF p_vote_type = 0 THEN
-    DELETE FROM votes 
-    WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint;
-  ELSE
-    -- Insert or update vote
-    INSERT INTO votes (llm_id, fingerprint, vote_type, ip_address, user_agent)
-    VALUES (p_llm_id, p_fingerprint, p_vote_type, p_ip_address, p_user_agent)
-    ON CONFLICT (llm_id, fingerprint)
-    DO UPDATE SET 
-      vote_type = EXCLUDED.vote_type,
-      updated_at = NOW();
-  END IF;
-  
-  -- Update session activity
-  INSERT INTO sessions (fingerprint, ip_address, user_agent, vote_count)
-  VALUES (p_fingerprint, p_ip_address, p_user_agent, 1)
-  ON CONFLICT (fingerprint)
-  DO UPDATE SET 
-    vote_count = sessions.vote_count + 1,
-    last_activity = NOW();
-  
-  -- Update aggregate for this specific LLM immediately
-  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
-  SELECT 
-    p_llm_id,
-    COALESCE(SUM(vote_type), 0),
-    COUNT(CASE WHEN vote_type = 1 THEN 1 END),
-    COUNT(CASE WHEN vote_type = -1 THEN 1 END),
-    COUNT(DISTINCT fingerprint)
-  FROM votes
-  WHERE llm_id = p_llm_id
-  ON CONFLICT (llm_id) DO UPDATE SET
-    total_votes = (SELECT COALESCE(SUM(vote_type), 0) FROM votes WHERE llm_id = p_llm_id),
-    upvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = 1),
-    downvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = -1),
-    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes WHERE llm_id = p_llm_id),
-    last_updated = NOW();
-  
-  -- Return success with vote counts from aggregate table
-  SELECT json_build_object(
-    'success', true,
-    'previous_vote', v_previous_vote,
-    'new_vote', p_vote_type,
-    'vote_count', (SELECT total_votes FROM vote_stats_aggregate WHERE llm_id = p_llm_id)
-  ) INTO v_result;
-  
-  RETURN v_result;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to get user votes
-CREATE OR REPLACE FUNCTION get_user_votes(p_fingerprint TEXT)
-RETURNS JSON AS $$
-BEGIN
-  RETURN json_object_agg(llm_id, vote_type)
-  FROM votes
-  WHERE fingerprint = p_fingerprint;
-END;
-$$ LANGUAGE plpgsql;
-
--- ============================================
--- STEP 6: ENABLE ROW LEVEL SECURITY
--- ============================================
-
-ALTER TABLE llms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE vote_stats_aggregate ENABLE ROW LEVEL SECURITY;
-ALTER TABLE global_stats ENABLE ROW LEVEL SECURITY;
-
--- ============================================
--- STEP 7: CREATE POLICIES
--- ============================================
-
--- LLMs policies
-CREATE POLICY "Public can read LLMs" ON llms
-  FOR SELECT USING (true);
-
--- Votes policies  
-CREATE POLICY "Public can read votes" ON votes
-  FOR SELECT USING (true);
-
-CREATE POLICY "Public can insert votes" ON votes
-  FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Public can update own votes" ON votes
-  FOR UPDATE USING (true);
-
-CREATE POLICY "Public can delete votes" ON votes
-  FOR DELETE USING (true);
-
--- Sessions policies
-CREATE POLICY "Public can read sessions" ON sessions
-  FOR SELECT USING (true);
-
-CREATE POLICY "Public can insert/update sessions" ON sessions
-  FOR ALL USING (true);
-
--- Aggregate tables policies
-CREATE POLICY "Public can read vote aggregates" ON vote_stats_aggregate
-  FOR SELECT USING (true);
-
-CREATE POLICY "Public can read global stats" ON global_stats
-  FOR SELECT USING (true);
-
--- ============================================
--- STEP 8: CREATE INDEXES
--- ============================================
-
-CREATE INDEX idx_votes_llm_id ON votes(llm_id);
-CREATE INDEX idx_votes_fingerprint ON votes(fingerprint);
-CREATE INDEX idx_votes_created_at ON votes(created_at DESC);
-CREATE INDEX idx_sessions_fingerprint ON sessions(fingerprint);
-CREATE INDEX idx_vote_stats_aggregate_total_votes ON vote_stats_aggregate(total_votes DESC);
-CREATE INDEX idx_vote_stats_aggregate_last_updated ON vote_stats_aggregate(last_updated DESC);
-
--- ============================================
--- STEP 9: CONFIGURE REALTIME
--- ============================================
-
--- Enable Realtime for aggregate tables only (not votes table for performance)
-ALTER PUBLICATION supabase_realtime ADD TABLE vote_stats_aggregate;
-ALTER PUBLICATION supabase_realtime ADD TABLE global_stats;
-
--- ============================================
--- STEP 10: INSERT LLM DATA
--- ============================================
-
-INSERT INTO llms (id, name, company, description, logo, image, color, release_year, use_cases) VALUES
-('gpt-4o', 'GPT-4o', 'OpenAI', 'Most advanced multimodal AI with vision, analysis, and coding capabilities', '🤖', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/200px-OpenAI_Logo.svg.png', 'from-green-500 to-emerald-600', 2024, ARRAY['General purpose', 'Code generation', 'Creative writing', 'Vision tasks']),
-('claude-3-5-sonnet', 'Claude 3.5 Sonnet', 'Anthropic', 'Balanced model excelling at analysis, coding, and nuanced conversation', '🧠', 'https://www.anthropic.com/_next/static/media/claude-logo.2f5f0b53.svg', 'from-orange-500 to-amber-600', 2024, ARRAY['Code analysis', 'Research', 'Writing', 'Complex reasoning']),
-('gemini-ultra', 'Gemini Ultra', 'Google', 'Google''s flagship model with strong multimodal and reasoning abilities', '💎', 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg', 'from-blue-500 to-cyan-600', 2024, ARRAY['Multimodal tasks', 'Scientific research', 'Code', 'Mathematics']),
-('llama-3-70b', 'Llama 3 70B', 'Meta', 'Open-source powerhouse for customizable AI applications', '🦙', 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Meta_Platforms_Inc._logo.svg/200px-Meta_Platforms_Inc._logo.svg.png', 'from-purple-500 to-violet-600', 2024, ARRAY['Open source projects', 'Fine-tuning', 'Research', 'Commercial use']),
-('mistral-large', 'Mistral Large', 'Mistral AI', 'European AI champion with strong multilingual capabilities', '🌪️', 'https://docs.mistral.ai/img/logo.svg', 'from-red-500 to-pink-600', 2024, ARRAY['Multilingual tasks', 'European languages', 'Code', 'Efficiency']),
-('command-r-plus', 'Command R+', 'Cohere', 'Enterprise-focused with excellent retrieval and grounding', '📊', 'https://cohere.com/favicon.svg', 'from-indigo-500 to-blue-600', 2024, ARRAY['Enterprise search', 'RAG systems', 'Document analysis', 'Business']),
-('grok', 'Grok', 'xAI', 'Real-time knowledge with humor and unconventional responses', '🚀', 'https://grok.x.ai/assets/grok-logo-light.svg', 'from-gray-600 to-slate-700', 2023, ARRAY['Real-time info', 'Social media', 'Humor', 'Current events']),
-('perplexity', 'Perplexity', 'Perplexity AI', 'Search-enhanced AI with real-time web access and citations', '🔍', 'https://www.perplexity.ai/favicon.svg', 'from-teal-500 to-cyan-600', 2024, ARRAY['Web search', 'Research', 'Fact-checking', 'Citations']),
-('qwen-2-5', 'Qwen 2.5', 'Alibaba', 'Strong Asian language support with competitive performance', '🐉', 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Alibaba-Logo.svg/200px-Alibaba-Logo.svg.png', 'from-yellow-500 to-orange-600', 2024, ARRAY['Chinese language', 'Asian markets', 'E-commerce', 'Translation']),
-('deepseek-coder', 'DeepSeek Coder', 'DeepSeek', 'Specialized coding model with excellent debugging capabilities', '💻', 'https://github.com/deepseek-ai.png', 'from-green-600 to-teal-700', 2024, ARRAY['Code generation', 'Debugging', 'Code review', 'Documentation']),
-('phi-3', 'Phi-3', 'Microsoft', 'Small but mighty model optimized for edge deployment', '⚡', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png', 'from-blue-600 to-indigo-700', 2024, ARRAY['Edge computing', 'Mobile apps', 'Low resource', 'Fast inference']),
-('falcon-180b', 'Falcon 180B', 'TII UAE', 'Open-source giant with strong performance across tasks', '🦅', 'https://www.tii.ae/sites/default/files/2022-12/TII-logo-WHITE.png', 'from-amber-600 to-yellow-700', 2023, ARRAY['Open source', 'Research', 'Arabic language', 'General purpose']),
-('vicuna-33b', 'Vicuna-33B', 'LMSYS', 'Fine-tuned Llama model with improved conversational abilities', '🦌', 'https://github.com/lm-sys.png', 'from-pink-500 to-rose-600', 2023, ARRAY['Chatbots', 'Open source', 'Fine-tuning base', 'Research']),
-('solar-10-7b', 'SOLAR-10.7B', 'Upstage AI', 'Efficient Korean model with strong multilingual capabilities', '☀️', 'https://github.com/upstage-ai.png', 'from-orange-500 to-red-600', 2023, ARRAY['Korean language', 'Efficient inference', 'Asian languages', 'Small models']),
-('yi-34b', 'Yi-34B', '01.AI', 'Bilingual model excelling in Chinese and English tasks', '🎯', 'https://github.com/01-ai.png', 'from-purple-600 to-blue-600', 2023, ARRAY['Bilingual tasks', 'Chinese AI', 'Long context', 'Reasoning']),
-('mixtral-8x7b', 'Mixtral 8x7B', 'Mistral AI', 'MoE architecture for efficient high-performance inference', '🔀', 'https://docs.mistral.ai/img/logo.svg', 'from-cyan-500 to-blue-600', 2023, ARRAY['Mixture of Experts', 'Efficient scaling', 'Code tasks', 'Multi-language']),
-('stablelm-2', 'StableLM 2', 'Stability AI', 'Open model optimized for transparency and customization', '🏔️', 'https://github.com/stability-ai.png', 'from-indigo-500 to-purple-600', 2024, ARRAY['Open weights', 'Research friendly', 'Customization', 'Transparency']),
-('internlm-2', 'InternLM 2', 'Shanghai AI Lab', 'Chinese model with strong reasoning and tool use', '🌐', 'https://github.com/internlm.png', 'from-blue-500 to-green-600', 2024, ARRAY['Tool use', 'Chinese tasks', 'Mathematical reasoning', 'Code']),
-('wizardlm-2', 'WizardLM 2', 'Microsoft', 'Instruction-following model with complex reasoning', '🧙', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png', 'from-purple-500 to-pink-600', 2024, ARRAY['Instructions', 'Complex tasks', 'Step-by-step', 'Education']),
-('openchat-3-5', 'OpenChat 3.5', 'OpenChat', 'Community model achieving GPT-3.5 level performance', '💬', 'https://github.com/imoneoi.png', 'from-green-500 to-blue-600', 2024, ARRAY['Open source', 'Chat optimization', 'Community driven', 'Efficient']);
-
--- ============================================
--- STEP 11: INITIALIZE AGGREGATES
--- ============================================
-
--- Run initial population of aggregates
-SELECT update_vote_aggregates();
-
--- ============================================
--- DONE! 
--- ============================================
-
-DO $$ 
-BEGIN
-  RAISE NOTICE 'Fresh installation completed successfully!';
-  RAISE NOTICE 'Tables created: llms, votes, sessions, vote_stats_aggregate, global_stats';
-  RAISE NOTICE 'Functions created: handle_vote, get_user_votes, update_vote_aggregates';
-  RAISE NOTICE 'Realtime enabled for: vote_stats_aggregate, global_stats';
-  RAISE NOTICE '';
-  RAISE NOTICE 'Next steps:';
-  RAISE NOTICE '1. Test voting: SELECT handle_vote(''gpt-4o'', ''test-fingerprint'', 1);';
-  RAISE NOTICE '2. Check aggregates: SELECT * FROM vote_stats_aggregate;';
-  RAISE NOTICE '3. Set up cron job to run: SELECT update_vote_aggregates();';
-END $$;
-
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://szoxudbgfcewsnayqqub.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6b3h1ZGJnZmNld3NuYXlxcXViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzOTEyMzEsImV4cCI6MjA3MTk2NzIzMX0.ZnC9lBcHqZvbRsToiphkPVzk3gZ9MBicpREUIJxq4Lc
-
-# Node Environment
-NODE_ENV=production
-
-# Port Configuration (for Vercel)
-PORT=3000
-
-
-{
-  "name": "llm-popularity-tracker",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@fingerprintjs/fingerprintjs": "^4.6.2",
-    "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.56.0",
-    "autoprefixer": "^10.4.21",
-    "framer-motion": "^12.23.12",
-    "lucide-react": "^0.542.0",
-    "next": "15.5.2",
-    "postcss": "^8.5.6",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "recharts": "^3.1.2",
-    "sonner": "^2.0.7",
-    "tailwindcss": "^3.4.17",
-    "zustand": "^5.0.8"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.2"
-  }
-}

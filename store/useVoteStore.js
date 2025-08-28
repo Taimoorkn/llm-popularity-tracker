@@ -21,6 +21,8 @@ const useVoteStore = create((set, get) => ({
   lastUpdate: null,
   fingerprint: null,
   realtimeConnected: false,
+  lastVoteTime: 0,
+  voteThrottleMs: 2000, // 2 second throttle between votes
   
   // Initialize votes and real-time connection
   initializeVotes: async () => {
@@ -108,6 +110,19 @@ const useVoteStore = create((set, get) => ({
       return;
     }
     
+    // Check rate limiting
+    const now = Date.now();
+    const timeSinceLastVote = now - get().lastVoteTime;
+    const throttleMs = get().voteThrottleMs;
+    
+    if (timeSinceLastVote < throttleMs) {
+      const waitTime = Math.ceil((throttleMs - timeSinceLastVote) / 1000);
+      set({ error: `Please wait ${waitTime} second${waitTime > 1 ? 's' : ''} between votes` });
+      setTimeout(() => set({ error: null }), 2000);
+      console.log(`Rate limited: ${timeSinceLastVote}ms since last vote, need ${throttleMs}ms`);
+      return;
+    }
+    
     const currentUserVote = get().userVotes[llmId] || 0;
     
     // Don't vote if it's the same
@@ -115,6 +130,9 @@ const useVoteStore = create((set, get) => ({
       console.log('Same vote, ignoring');
       return;
     }
+    
+    // Update last vote time
+    set({ lastVoteTime: now });
     
     // Optimistic update
     const optimisticVotes = { ...get().votes };
