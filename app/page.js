@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, TrendingUp } from 'lucide-react';
-import { Toaster } from 'sonner';
+import { Search, Wifi, WifiOff } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 import Header from '@/components/Header';
 import LLMCard from '@/components/LLMCard';
 import StatsPanel from '@/components/StatsPanel';
@@ -12,25 +12,46 @@ import useVoteStore from '@/store/useVoteStore';
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name'); // votes, name, company
-  const [showChart, setShowChart] = useState(true);
+  const [sortBy, setSortBy] = useState('votes'); // votes, name, company
   
-  const { llms, initializeVotes, rankings, loading } = useVoteStore();
+  const { 
+    llms, 
+    initializeVotes, 
+    loading,
+    realtimeConnected,
+    cleanup,
+    error
+  } = useVoteStore();
   
   useEffect(() => {
+    // Initialize Supabase connection
     initializeVotes();
     
-    // Set up polling for real-time updates (every 5 seconds)
-    const pollInterval = setInterval(() => {
-      // Silently sync with server to get latest votes
-      useVoteStore.getState().syncWithServer();
-    }, 5000); // Poll every 5 seconds for better real-time experience
+    // Show connection status
+    const timer = setTimeout(() => {
+      if (realtimeConnected) {
+        toast.success('Connected to real-time updates', {
+          icon: <Wifi className="w-4 h-4" />,
+          duration: 2000
+        });
+      }
+    }, 2000);
     
-    // Clean up on unmount
-    return () => clearInterval(pollInterval);
-  }, [initializeVotes]);
+    // Cleanup on unmount
+    return () => {
+      clearTimeout(timer);
+      cleanup();
+    };
+  }, []);
   
-  // Filter LLMs but maintain stable ordering
+  // Show error toast if there's an error
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+  
+  // Filter and sort LLMs
   const filteredLLMs = llms
     .filter(llm => 
       llm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -38,17 +59,17 @@ export default function Home() {
       llm.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
   
-  // Create stable sorted order that doesn't change based on vote changes
-  const stableSortedLLMs = [...filteredLLMs].sort((a, b) => {
-    if (sortBy === 'name') {
+  const sortedLLMs = [...filteredLLMs].sort((a, b) => {
+    const store = useVoteStore.getState();
+    
+    if (sortBy === 'votes') {
+      const aVotes = store.getVoteCount(a.id);
+      const bVotes = store.getVoteCount(b.id);
+      return bVotes - aVotes;
+    } else if (sortBy === 'name') {
       return a.name.localeCompare(b.name);
     } else if (sortBy === 'company') {
       return a.company.localeCompare(b.company);
-    } else if (sortBy === 'votes') {
-      // Use initial vote counts from data, not dynamic rankings
-      const aInitialRank = llms.findIndex(llm => llm.id === a.id);
-      const bInitialRank = llms.findIndex(llm => llm.id === b.id);
-      return aInitialRank - bInitialRank;
     }
     return 0;
   });
@@ -57,6 +78,32 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <Toaster position="bottom-right" theme="dark" />
       <Header />
+      
+      {/* Real-time Connection Indicator */}
+      <div className="fixed top-4 right-4 z-50">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border ${
+            realtimeConnected 
+              ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+              : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+          }`}
+        >
+          {realtimeConnected ? (
+            <>
+              <Wifi className="w-3 h-3" />
+              <span>Live</span>
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3 h-3" />
+              <span>Connecting...</span>
+            </>
+          )}
+        </motion.div>
+      </div>
       
       <main className="container mx-auto px-4 py-8">
         {/* Hero Section */}
@@ -69,8 +116,8 @@ export default function Home() {
             Which LLM Rules in 2025?
           </h2>
           <p className="text-muted-foreground/80 max-w-xl mx-auto text-sm font-light font-inter leading-relaxed">
-            Cast your vote for the AI models you love. Upvote your favorites, downvote the ones you don&apos;t prefer.
-            Every vote counts in determining the community&apos;s choice!
+            Cast your vote for the AI models you love. Real-time updates powered by Supabase.
+            Every vote instantly updates for all users worldwide!
           </p>
         </motion.div>
         
@@ -103,12 +150,12 @@ export default function Home() {
           </div>
         </div>
         
-        {/* Chart - Always visible */}
+        {/* Chart */}
         <div className="mb-8">
           <VoteChart />
         </div>
         
-        {/* LLM Grid/List */}
+        {/* LLM Grid */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <motion.div
@@ -122,13 +169,27 @@ export default function Home() {
             layout
             className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
           >
-            {stableSortedLLMs.map((llm, index) => (
-              <LLMCard key={llm.id} llm={llm} index={index} />
-            ))}
+            <AnimatePresence mode="popLayout">
+              {sortedLLMs.map((llm, index) => (
+                <motion.div
+                  key={llm.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ 
+                    duration: 0.3,
+                    delay: index * 0.02
+                  }}
+                >
+                  <LLMCard llm={llm} index={index} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </motion.div>
         )}
         
-        {stableSortedLLMs.length === 0 && !loading && (
+        {sortedLLMs.length === 0 && !loading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -145,10 +206,10 @@ export default function Home() {
       <footer className="border-t border-border/30 mt-12 py-6">
         <div className="container mx-auto px-4 text-center">
           <p className="text-muted-foreground/60 text-sm font-light font-inter">
-            Made with ❤️ by the AI Community | 2025
+            Made with ❤️ by the AI Community | Real-time powered by Supabase
           </p>
           <p className="text-xs text-muted-foreground/40 mt-1.5 font-light font-inter">
-            Vote responsibly. Each user can upvote or downvote any model.
+            Vote responsibly. All votes update instantly for everyone!
           </p>
         </div>
       </footer>

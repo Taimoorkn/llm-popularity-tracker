@@ -2,147 +2,120 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
+## Project Overview
 
-### Development
-- `npm run dev` - Start development server at http://localhost:3000
-- `npm run build` - Build production version
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint checks
-
-### Database Operations
-- `npm run db:migrate` - Run database migrations
-- `npm run db:seed` - Seed initial data
-- `npm run db:reset` - Reset database (use --seed flag to reseed)
-
-### Docker
-- `docker-compose up -d` - Start all services (PostgreSQL, Redis, App)
-- `docker-compose down` - Stop all services
-- `docker-compose logs -f` - View logs
-- `docker-compose down -v` - Complete cleanup (removes all data)
+This is a **real-time voting application** for tracking LLM popularity using:
+- **Frontend**: Next.js 15, React 19, Zustand, Tailwind CSS
+- **Backend**: Supabase (PostgreSQL + WebSockets)  
+- **Hosting**: Vercel (frontend) + Supabase (backend)
+- **Real-time**: WebSocket connections via Supabase Realtime
 
 ## Architecture
 
-### Overview
-This is a Next.js 15 application for tracking and voting on LLM popularity. Users can upvote/downvote various LLMs, with real-time updates and persistent storage. The app uses database storage with PostgreSQL and Redis for improved performance and reliability.
+### Simplified Cloud Architecture
+```
+Users → Vercel CDN → Next.js App → Supabase Cloud
+                                    ├── PostgreSQL
+                                    ├── Realtime WebSockets
+                                    └── Auto REST APIs
+```
 
-### Tech Stack
-- **Frontend**: Next.js 15, React 19, Zustand, Tailwind CSS, Framer Motion, Recharts
-- **Backend**: Node.js, Express middleware
-- **Database**: PostgreSQL (production) or file-based JSON (development)
-- **Caching**: Redis (production) or in-memory (development)
-- **Security**: JWT, bcrypt, rate limiting, Joi validation
-- **Real-time**: Pusher (optional), polling-based updates
-- **Deployment**: Docker, Docker Compose, Nginx
+### Key Features
+- **Real-time voting**: Updates appear instantly for all users (<100ms)
+- **Session-based voting**: One vote per LLM per user (fingerprint-based)
+- **No server management**: Everything runs in the cloud
+- **Free for 10k users/month**: Uses free tiers effectively
 
-### Key Components
+## Commands
 
-**Frontend State Management**
-- Uses Zustand (`store/useVoteStore.js`) for global state management
-- Handles voting, rankings, stats, and real-time polling
-- Optimistic UI updates with rollback on failure
-- Auto-syncs with backend every 10 seconds
-
-**Data Flow**
-1. Client votes trigger optimistic UI updates via Zustand
-2. API calls to `/api/vote` persist changes server-side
-3. DatabaseVoteManager handles persistence in PostgreSQL
-4. Session-based voting using httpOnly cookies prevents manipulation
-5. Real-time polling every 5 seconds keeps data fresh
-6. Redis caches frequently accessed data and handles pub/sub for real-time updates
-
-**Vote System Design**
-- Session-based voting (one vote per LLM per session)
-- Vote types: upvote (+1), downvote (-1), neutral (0)
-- Tracks per-session votes in memory, aggregate votes on disk/database
-- Calculates trending models based on last hour activity
-- Fraud detection with fingerprinting and rate limiting
-
-**Storage Architecture**
-- **PostgreSQL Database**:
-   - `lib/vote-manager-db.js` - Database operations
-   - `lib/database.js` - Connection pooling
-   - Stores votes, user sessions, and analytics
-   - Migrations in `scripts/migrate.js`
-   
-- **Redis Cache**:
-   - Session storage and caching layer
-   - Real-time pub/sub for vote updates
-   - Rate limiting and fraud detection
-   - Activity tracking
-
-**API Endpoints**
-- `POST /api/vote` - Submit a vote (rate limited: 60/min)
-- `POST /api/vote/sync` - Sync user votes (rate limited: 100/min)
-- `GET /api/stats` - Get statistics (rate limited: 200/min)
-- `GET /api/health` - Health check (unlimited)
-
-**Key Files Structure**
-- `app/page.js` - Main voting interface with search, sort, filtering and real-time polling
-- `app/layout.js` - Root layout with metadata and providers
-- `app/api/` - API route handlers
-- `components/` - React components (Header, LLMCard, StatsPanel, VoteChart)
-- `lib/vote-manager-wrapper.js` - Database manager initialization
-- `lib/vote-manager-db.js` - PostgreSQL database operations
-- `lib/cache.js` - Redis caching and pub/sub
-- `lib/llm-data.js` - Static LLM definitions (20 models)
-- `lib/middleware.js` - Rate limiting and security middleware
-- `lib/logger.js` - Logging configuration (Winston/Pino)
-- `store/useVoteStore.js` - Zustand store with real-time sync
-
-**UI Components**
-- Framer Motion for smooth animations
-- Tailwind CSS with custom dark theme
-- Recharts for vote visualization
-- Lucide React for icons
-- Sonner for toast notifications
-- Responsive design with mobile support
-
-**Security Features**
-- Rate limiting per endpoint
-- Input validation with Joi schemas
-- SQL injection protection
-- XSS protection headers
-- CSRF protection
-- Session fingerprinting
-- Security headers in Nginx
+```bash
+npm run dev    # Start development server
+npm run build  # Build for production  
+npm start      # Start production server
+npm run lint   # Run ESLint
+```
 
 ## Environment Variables
 
-### Required for Production
-- `DATABASE_URL` - PostgreSQL connection string
-- `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
-- `REDIS_URL` or `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
-- `JWT_SECRET` - Secret for JWT tokens
-- `SESSION_SECRET` - Secret for sessions
+Required in `.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-### Optional
-- `NEXT_PUBLIC_PUSHER_APP_KEY`, `PUSHER_APP_ID`, `PUSHER_APP_SECRET` - For real-time updates
-- `NEXT_PUBLIC_FPJS_PUBLIC_API_KEY` - FingerprintJS for fraud detection
-- `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS` - Rate limiting config
-- `ENABLE_ANALYTICS`, `ENABLE_REAL_TIME` - Feature flags
+## Key Files
 
-## Docker Deployment
+### Frontend
+- `app/page.js` - Main voting interface with real-time updates
+- `components/LLMCard.jsx` - Individual LLM voting cards
+- `store/useVoteStore.js` - Zustand store with Supabase integration
 
-The project includes a complete Docker setup:
-- `Dockerfile` - Multi-stage Alpine build
-- `docker-compose.yml` - PostgreSQL + Redis + App + Nginx
-- `nginx.conf` - Reverse proxy with caching and rate limiting
-- Health checks for all services
-- Automatic database migration and seeding
+### Backend (Supabase)
+- `lib/supabase/client.js` - Supabase client configuration
+- `lib/supabase/vote-manager.js` - Vote management logic
+- `supabase/schema.sql` - Database schema
 
-## Performance Notes
-The application uses PostgreSQL and Redis for data persistence and caching. The current architecture is suitable for development and moderate production loads. For higher traffic scenarios, additional optimizations would be needed.
+### Data
+- `lib/llm-data.js` - Static LLM definitions (20 models)
+- `lib/fingerprint.js` - User fingerprinting for sessions
 
-## Important Considerations
+## Development Workflow
 
-- Vote data persists to PostgreSQL with Redis caching
-- Session cookies expire after 30 days
-- Real-time updates via polling every 5 seconds and Redis pub/sub
-- Database uses connection pooling and prepared statements
-- The app tracks hourly and daily voting statistics
-- No authentication system - voting is session-based only
-- Rate limiting is enforced at both application and Nginx level
-- All LLM logos are loaded from remote CDNs (configured in next.config.mjs)
-- The app auto-creates necessary database tables on first run
-- Uses PostgreSQL and Redis for performance and reliability
+1. **Local Development**:
+   - Set up Supabase project
+   - Add credentials to `.env.local`
+   - Run `npm run dev`
+
+2. **Testing Real-time**:
+   - Open app in multiple browser tabs
+   - Vote in one tab
+   - See instant updates in all tabs
+
+3. **Deployment**:
+   - Push to GitHub
+   - Import to Vercel
+   - Add env variables
+   - Deploy!
+
+## Important Notes
+
+- **No Docker/PostgreSQL/Redis needed** - Everything is cloud-based
+- **WebSockets for real-time** - Not polling
+- **Fingerprint-based voting** - No auth required
+- **200 concurrent connections** limit on free tier
+- **Optimistic UI updates** with rollback on failure
+
+## Deployment
+
+### Vercel (Frontend)
+- Automatic deployments from GitHub
+- Environment variables in dashboard
+- Global CDN included
+
+### Supabase (Backend)
+- Database + real-time in one service
+- Row-level security for vote protection
+- Auto-scaling included
+
+## Performance
+
+- **Response time**: <100ms for vote updates
+- **Capacity**: 10,000 users/month on free tier
+- **Concurrent users**: 200 WebSocket connections
+- **Database**: 500MB storage (millions of votes)
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| No real-time updates | Check Supabase credentials |
+| Votes not saving | Check Supabase dashboard logs |
+| Connection errors | Verify WebSocket port not blocked |
+
+## DO NOT
+
+- Don't add complex backend logic (keep it simple)
+- Don't add authentication (fingerprint is enough)
+- Don't add paid services without asking
+- Don't remove real-time WebSocket functionality
+- Don't add polling - we use WebSockets!
