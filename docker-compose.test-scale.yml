@@ -1,0 +1,116 @@
+#docker-compose.test-scale.yml
+version: '3.8'
+
+services:
+  # PostgreSQL Primary (using existing setup)
+  postgres:
+    image: postgres:14-alpine
+    container_name: llm-postgres-scaled
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: llm_tracker
+      POSTGRES_USER: llm_user
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_scaled_data:/var/lib/postgresql/data
+      - ./config/postgres-optimization.sql:/docker-entrypoint-initdb.d/01-optimize.sql
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U llm_user -d llm_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - llm-network
+
+  # Redis with enhanced configuration
+  redis:
+    image: redis:7-alpine
+    container_name: llm-redis-scaled
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_scaled_data:/data
+    command: >
+      redis-server 
+      --appendonly yes 
+      --maxmemory 1gb 
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - llm-network
+
+  # Single app instance for testing
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llm-app-scaled
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://llm_user:changeme@postgres:5432/llm_tracker
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: llm_tracker
+      POSTGRES_USER: llm_user
+      POSTGRES_PASSWORD: changeme
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:-change-this-session-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        sleep 5 &&
+        npm run db:migrate &&
+        npm run db:seed &&
+        node server.js
+      "
+    networks:
+      - llm-network
+
+  # Nginx for load balancing (when scaling app)
+  nginx:
+    image: nginx:alpine
+    container_name: llm-nginx-scaled
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx-scale.conf:/etc/nginx/nginx.conf:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - app
+    networks:
+      - llm-network
+
+volumes:
+  postgres_scaled_data:
+  redis_scaled_data:
+  nginx_cache:
+
+networks:
+  llm-network:
+    driver: bridge
