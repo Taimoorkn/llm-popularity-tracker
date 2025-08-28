@@ -58,25 +58,7 @@ SELECT * FROM cron.job;
 SELECT cron.unschedule('update-vote-aggregates');
 ```
 
-#### Option B: Edge Function (Optional)
-The Edge Function at `supabase/functions/update-aggregates/index.js` is ready but NOT required.
-
-To deploy it (if you want to use it):
-```bash
-# Install Supabase CLI
-npm install -g supabase
-
-# Link your project
-supabase link --project-ref your-project-ref
-
-# Deploy the function
-supabase functions deploy update-aggregates
-
-# Set up a cron trigger in Supabase Dashboard
-# Functions → update-aggregates → Schedule → Every 30 seconds
-```
-
-#### Option C: Manual Updates
+#### Option B: Manual Updates
 The `handle_vote()` function already updates aggregates for individual LLMs when votes happen, so periodic updates are mainly for global stats.
 
 ### 3. Environment Variables
@@ -148,7 +130,7 @@ SELECT COUNT(*) FROM votes;
 
 ## ⚠️ Important Notes
 
-1. **Edge Function is OPTIONAL** - The system works without it if you use pg_cron or rely on vote-time updates
+1. **Using pg_cron** - The system uses database-level cron for periodic aggregate updates
 
 2. **Real-time Subscriptions** - The app only subscribes to aggregate tables, not individual votes
 
@@ -169,10 +151,10 @@ SELECT COUNT(*) FROM votes;
 - Check if `handle_vote()` is being called
 - Verify RLS policies are enabled
 
-### Edge Function errors (if using)
-- Check function logs in Supabase Dashboard
-- Verify environment variables are set
-- Test function manually in Dashboard
+### Cron job not running
+- Verify pg_cron extension is enabled
+- Check cron job exists: `SELECT * FROM cron.job;`
+- Check cron job history: `SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;`
 
 ## ✨ Summary
 

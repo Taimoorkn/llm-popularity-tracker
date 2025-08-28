@@ -1,0 +1,2139 @@
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\api\health\route.js
+import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase/client';
+
+export async function GET() {
+  try {
+    // Test Supabase connection
+    const { data, error } = await supabase
+      .from('llms')
+      .select('count')
+      .limit(1);
+
+    const healthy = !error;
+
+    return NextResponse.json({
+      status: healthy ? 'healthy' : 'unhealthy',
+      service: 'llm-popularity-tracker',
+      timestamp: new Date().toISOString(),
+      supabase: {
+        connected: healthy,
+        error: error?.message
+      }
+    }, {
+      status: healthy ? 200 : 503
+    });
+  } catch (error) {
+    return NextResponse.json({
+      status: 'error',
+      service: 'llm-popularity-tracker',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    }, {
+      status: 503
+    });
+  }
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\globals.css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  * {
+    @apply border-border;
+  }
+  
+  /* Typography System */
+  .font-inter {
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  }
+  
+  .font-sora {
+    font-family: var(--font-sora), system-ui, -apple-system, sans-serif;
+  }
+  
+  .font-mono {
+    font-family: var(--font-mono), 'Courier New', monospace;
+  }
+  
+  /* Heading styles with lighter weights */
+  h1 {
+    @apply font-sora font-light tracking-tight;
+  }
+  
+  h2 {
+    @apply font-sora font-normal tracking-tight;
+  }
+  
+  h3 {
+    @apply font-inter font-medium;
+  }
+  
+  p, span, div {
+    @apply font-inter font-light;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary via-accent to-success bg-clip-text text-transparent;
+  }
+
+  .glow {
+    @apply shadow-lg shadow-primary/20;
+  }
+
+  .card-glow {
+    @apply hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #4b5563 #1f2937;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-gray-800 rounded-full;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-gray-600 rounded-full hover:bg-gray-500;
+  }
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\layout.js
+import { Inter, Sora, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  display: 'swap',
+});
+
+const sora = Sora({
+  variable: "--font-sora",
+  subsets: ["latin"],
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  display: 'swap',
+});
+
+export const metadata = {
+  title: "LLM Popularity Tracker 2025",
+  description: "Vote for your favorite Large Language Models and see real-time community rankings",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en" className="dark">
+      <body
+        className={`${inter.variable} ${sora.variable} ${jetbrainsMono.variable} antialiased bg-background text-foreground font-inter`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\app\page.js
+'use client';
+
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Wifi, WifiOff } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import Header from '@/components/Header';
+import LLMCard from '@/components/LLMCard';
+import StatsPanel from '@/components/StatsPanel';
+import VoteChart from '@/components/VoteChart';
+import useVoteStore from '@/store/useVoteStore';
+
+export default function Home() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('votes'); // votes, name, company
+  
+  const { 
+    llms, 
+    initializeVotes, 
+    loading,
+    realtimeConnected,
+    cleanup,
+    error
+  } = useVoteStore();
+  
+  useEffect(() => {
+    // Initialize Supabase connection
+    initializeVotes();
+    
+    // Show connection status
+    const timer = setTimeout(() => {
+      if (realtimeConnected) {
+        toast.success('Connected to real-time updates', {
+          icon: <Wifi className="w-4 h-4" />,
+          duration: 2000
+        });
+      }
+    }, 2000);
+    
+    // Cleanup on unmount
+    return () => {
+      clearTimeout(timer);
+      cleanup();
+    };
+  }, []);
+  
+  // Show error toast if there's an error
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+  
+  // Filter and sort LLMs
+  const filteredLLMs = llms
+    .filter(llm => 
+      llm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      llm.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      llm.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  
+  const sortedLLMs = [...filteredLLMs].sort((a, b) => {
+    const store = useVoteStore.getState();
+    
+    if (sortBy === 'votes') {
+      const aVotes = store.getVoteCount(a.id);
+      const bVotes = store.getVoteCount(b.id);
+      return bVotes - aVotes;
+    } else if (sortBy === 'name') {
+      return a.name.localeCompare(b.name);
+    } else if (sortBy === 'company') {
+      return a.company.localeCompare(b.company);
+    }
+    return 0;
+  });
+  
+  return (
+    <div className="min-h-screen bg-background">
+      <Toaster position="bottom-right" theme="dark" />
+      <Header />
+      
+      {/* Real-time Connection Indicator */}
+      <div className="fixed top-4 right-4 z-50">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border ${
+            realtimeConnected 
+              ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+              : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+          }`}
+        >
+          {realtimeConnected ? (
+            <>
+              <Wifi className="w-3 h-3" />
+              <span>Live</span>
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3 h-3" />
+              <span>Connecting...</span>
+            </>
+          )}
+        </motion.div>
+      </div>
+      
+      <main className="container mx-auto px-4 py-8">
+        {/* Hero Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-6"
+        >
+          <h2 className="text-2xl md:text-3xl font-light text-foreground mb-3 font-sora">
+            Which LLM Rules in 2025?
+          </h2>
+          <p className="text-muted-foreground/80 max-w-xl mx-auto text-sm font-light font-inter leading-relaxed">
+            Cast your vote for the AI models you love. Real-time updates powered by Supabase.
+            Every vote instantly updates for all users worldwide!
+          </p>
+        </motion.div>
+        
+        {/* Stats Panel */}
+        <StatsPanel />
+        
+        {/* Controls */}
+        <div className="flex flex-col md:flex-row gap-3 mb-6">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground/60" size={18} />
+            <input
+              type="text"
+              placeholder="Search LLMs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-card/50 border border-border/30 rounded-lg text-foreground text-sm font-light placeholder-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:bg-card/70 transition-all font-inter"
+            />
+          </div>
+          
+          <div className="flex gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-4 py-2 bg-card/50 border border-border/30 rounded-lg text-foreground text-sm font-light focus:outline-none focus:border-primary/50 focus:bg-card/70 transition-all font-inter"
+            >
+              <option value="votes">Sort by Votes</option>
+              <option value="name">Sort by Name</option>
+              <option value="company">Sort by Company</option>
+            </select>
+          </div>
+        </div>
+        
+        {/* Chart */}
+        <div className="mb-8">
+          <VoteChart />
+        </div>
+        
+        {/* LLM Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full"
+            />
+          </div>
+        ) : (
+          <motion.div
+            layout
+            className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
+          >
+            <AnimatePresence mode="popLayout">
+              {sortedLLMs.map((llm, index) => (
+                <motion.div
+                  key={llm.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ 
+                    duration: 0.3,
+                    delay: index * 0.02
+                  }}
+                >
+                  <LLMCard llm={llm} index={index} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+        
+        {sortedLLMs.length === 0 && !loading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-16"
+          >
+            <p className="text-muted-foreground text-lg">
+              No LLMs found matching your search.
+            </p>
+          </motion.div>
+        )}
+      </main>
+      
+      {/* Footer */}
+      <footer className="border-t border-border/30 mt-12 py-6">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-muted-foreground/60 text-sm font-light font-inter">
+            Made with ❤️ by the AI Community | Real-time powered by Supabase
+          </p>
+          <p className="text-xs text-muted-foreground/40 mt-1.5 font-light font-inter">
+            Vote responsibly. All votes update instantly for everyone!
+          </p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\components\Header.jsx
+'use client';
+
+import { motion } from 'framer-motion';
+import { Sparkles, Github } from 'lucide-react';
+
+export default function Header() {
+  return (
+    <motion.header
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50"
+    >
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            >
+              <Sparkles size={32} className="text-primary" />
+            </motion.div>
+            <div>
+              <h1 className="text-xl font-light text-gradient font-sora tracking-tight">LLM Popularity Tracker</h1>
+              <p className="text-xs text-muted-foreground/70 font-light font-inter">Vote for your favorite AI models</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-full font-light font-inter"
+            >
+              2025 Edition
+            </motion.div>
+            <motion.a
+              href="https://github.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Github size={20} />
+            </motion.a>
+          </div>
+        </div>
+      </div>
+    </motion.header>
+  );
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\components\LLMCard.jsx
+'use client';
+
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { ChevronUp, ChevronDown, TrendingUp, X } from 'lucide-react';
+import useVoteStore from '@/store/useVoteStore';
+import { toast } from 'sonner';
+
+export default function LLMCard({ llm, index }) {
+  const [imageError, setImageError] = useState(false);
+  const { vote, getUserVote, getVoteCount, isTrending, getRank } = useVoteStore();
+  
+  const userVote = getUserVote(llm.id);
+  const voteCount = getVoteCount(llm.id);
+  const trending = isTrending(llm.id);
+  const rank = getRank(llm.id);
+  
+  const handleVote = async (voteType) => {
+    console.log('🎯 [CARD] Vote button clicked:', { 
+      llm: llm.name, 
+      llmId: llm.id, 
+      voteType, 
+      currentUserVote: userVote,
+      currentVoteCount: voteCount 
+    });
+    
+    if (voteType === 0) {
+      // Clear vote
+      console.log('🎯 [CARD] Clearing vote for', llm.name);
+      await vote(llm.id, 0);
+      toast.success('Vote removed');
+    } else if (userVote !== voteType) {
+      // Only vote if it's different from current vote
+      console.log('🎯 [CARD] Casting new vote for', llm.name, ':', voteType === 1 ? 'UPVOTE' : 'DOWNVOTE');
+      await vote(llm.id, voteType);
+      toast.success(voteType === 1 ? 'Upvoted!' : 'Downvoted!');
+    } else {
+      console.log('🎯 [CARD] Same vote clicked, ignoring:', { llm: llm.name, voteType });
+    }
+    // If clicking the same vote button, do nothing (no toggle)
+  };
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.02, duration: 0.3 }}
+      whileHover={{ y: -2 }}
+      className="relative bg-gradient-to-br from-card/90 to-card/60 border border-border/30 rounded-lg p-3 shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm"
+    >
+      {/* Rank Badge - smaller and more subtle */}
+      {rank && rank <= 3 && (
+        <div className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium shadow-sm
+          ${rank === 1 ? 'bg-gradient-to-r from-yellow-400 to-amber-400 text-black' : ''}
+          ${rank === 2 ? 'bg-gradient-to-r from-gray-300 to-gray-400 text-black' : ''}
+          ${rank === 3 ? 'bg-gradient-to-r from-orange-400 to-orange-500 text-white' : ''}
+        `}>
+          {rank}
+        </div>
+      )}
+      
+      {/* Trending Badge - more subtle */}
+      {trending && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute top-1 left-1 bg-gradient-to-r from-red-500/80 to-pink-500/80 text-white px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5 shadow-sm"
+        >
+          <TrendingUp size={8} />
+          <span className="font-inter">HOT</span>
+        </motion.div>
+      )}
+      
+      {/* Header with Logo and Info - more compact */}
+      <div className="flex items-start gap-2.5 mb-3">
+        <div className="flex-shrink-0 w-9 h-9 rounded-md overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10 flex items-center justify-center">
+          {llm.image && !imageError ? (
+            <img 
+              src={llm.image} 
+              alt={`${llm.company} logo`}
+              className="w-7 h-7 object-contain"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <span className="text-sm">{llm.logo}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-medium text-foreground truncate font-sora leading-tight">{llm.name}</h3>
+          <p className="text-xs text-muted-foreground/70 font-light font-inter mt-0.5">{llm.company}</p>
+          <p className="text-[10px] text-muted-foreground/50 font-light font-inter">{llm.releaseYear}</p>
+        </div>
+      </div>
+      
+      {/* Vote Section - more compact */}
+      <div className="flex items-center justify-between bg-black/10 backdrop-blur-sm rounded-md p-2">
+        <motion.button
+          whileTap={userVote !== 1 ? { scale: 0.9 } : {}}
+          whileHover={userVote !== 1 ? { scale: 1.1 } : {}}
+          onClick={() => handleVote(1)}
+          disabled={userVote === 1}
+          className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
+            userVote === 1
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm shadow-green-500/20 cursor-default'
+              : 'bg-white/5 hover:bg-green-500/15 text-green-400 hover:text-green-300 border border-green-400/20 cursor-pointer'
+          }`}
+          aria-label="Upvote"
+          title={userVote === 1 ? "You upvoted this" : "Upvote"}
+        >
+          <ChevronUp size={16} strokeWidth={2} />
+        </motion.button>
+        
+        <div className="flex items-center gap-1.5">
+          {/* Vote count */}
+          <div className="flex flex-col items-center px-2">
+            <span className={`text-sm font-medium font-mono ${
+              voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-500'
+            }`}>
+              {voteCount > 0 ? '+' : ''}{voteCount}
+            </span>
+            <span className="text-[9px] text-muted-foreground/50 font-inter font-light">votes</span>
+          </div>
+          
+          {/* Clear vote button - smaller */}
+          {userVote !== 0 && (
+            <motion.button
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              whileTap={{ scale: 0.8 }}
+              whileHover={{ scale: 1.1 }}
+              onClick={() => handleVote(0)}
+              className="flex items-center justify-center w-5 h-5 rounded-full bg-white/5 hover:bg-white/10 text-gray-500 hover:text-gray-300 border border-gray-500/20 transition-all"
+              aria-label="Clear vote"
+              title="Clear vote"
+            >
+              <X size={10} strokeWidth={2} />
+            </motion.button>
+          )}
+        </div>
+        
+        <motion.button
+          whileTap={userVote !== -1 ? { scale: 0.9 } : {}}
+          whileHover={userVote !== -1 ? { scale: 1.1 } : {}}
+          onClick={() => handleVote(-1)}
+          disabled={userVote === -1}
+          className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
+            userVote === -1
+              ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-sm shadow-red-500/20 cursor-default'
+              : 'bg-white/5 hover:bg-red-500/15 text-red-400 hover:text-red-300 border border-red-400/20 cursor-pointer'
+          }`}
+          aria-label="Downvote"
+          title={userVote === -1 ? "You downvoted this" : "Downvote"}
+        >
+          <ChevronDown size={16} strokeWidth={2} />
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\components\StatsPanel.jsx
+'use client';
+
+import { motion } from 'framer-motion';
+import { TrendingUp, Users, Clock, Trophy, Activity } from 'lucide-react';
+import useVoteStore from '@/store/useVoteStore';
+
+export default function StatsPanel() {
+  const { stats } = useVoteStore();
+  
+  const statCards = [
+    {
+      icon: Users,
+      label: 'Total Votes',
+      value: stats.totalVotes || 0,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+    },
+    {
+      icon: Activity,
+      label: 'Votes Today',
+      value: stats.votesToday || 0,
+      color: 'text-success',
+      bgColor: 'bg-success/10',
+    },
+    {
+      icon: Clock,
+      label: 'Last Hour',
+      value: stats.votesLastHour || 0,
+      color: 'text-accent',
+      bgColor: 'bg-accent/10',
+    },
+    {
+      icon: Trophy,
+      label: 'Leading',
+      value: stats.topModel || 'None',
+      color: 'text-yellow-500',
+      bgColor: 'bg-yellow-500/10',
+      small: true,
+    },
+  ];
+  
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      {statCards.map((stat, index) => (
+        <motion.div
+          key={stat.label}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: index * 0.1 }}
+          className="bg-card border border-border rounded-lg p-4"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+              <stat.icon size={20} className={stat.color} />
+            </div>
+            {stat.label === 'Last Hour' && stats.votesLastHour > 0 && (
+              <TrendingUp size={16} className="text-success" />
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground/70 mb-1 font-light font-inter">{stat.label}</p>
+          <p className={`${stat.small ? 'text-base' : 'text-xl'} font-normal text-foreground font-sora`}>
+            {typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}
+          </p>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\components\VoteChart.jsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from 'recharts';
+import useVoteStore from '@/store/useVoteStore';
+import { BarChart3, PieChart } from 'lucide-react';
+
+export default function VoteChart() {
+  const [chartType, setChartType] = useState('bar');
+  const { votes, llms } = useVoteStore();
+  
+  // Prepare chart data - show ALL LLMs with their vote counts
+  const chartData = llms.map((llm) => {
+    const voteCount = votes[llm.id] || 0;
+    return {
+      name: llm.name,
+      votes: voteCount,
+      color: llm.color || 'from-gray-500 to-gray-600',
+      id: llm.id,
+    };
+  }).sort((a, b) => b.votes - a.votes); // Sort by votes descending
+  
+  // Extract gradient colors for bars
+  const getBarColor = (color) => {
+    const colors = color.match(/from-(\w+)-\d+\sto-(\w+)-\d+/);
+    if (colors) {
+      const colorMap = {
+        green: '#10b981',
+        emerald: '#10b981',
+        orange: '#f59e0b',
+        amber: '#f59e0b',
+        blue: '#3b82f6',
+        cyan: '#06b6d4',
+        purple: '#8b5cf6',
+        violet: '#8b5cf6',
+        red: '#ef4444',
+        pink: '#ec4899',
+        indigo: '#6366f1',
+        gray: '#6b7280',
+        slate: '#64748b',
+        teal: '#14b8a6',
+        yellow: '#eab308',
+      };
+      return colorMap[colors[1]] || '#6b7280';
+    }
+    return '#6b7280';
+  };
+  
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload[0]) {
+      return (
+        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+          <p className="font-bold text-foreground">{payload[0].payload.name}</p>
+          <p className="text-sm text-muted-foreground">
+            Votes: <span className="text-primary font-bold">{payload[0].value}</span>
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-card border border-border rounded-lg p-6"
+    >
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+          <BarChart3 size={24} className="text-primary" />
+          All LLM Votes
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setChartType('bar')}
+            className={`p-2 rounded-lg transition-all ${
+              chartType === 'bar' ? 'bg-primary text-white' : 'bg-card-hover text-muted-foreground'
+            }`}
+          >
+            <BarChart3 size={16} />
+          </button>
+        </div>
+      </div>
+      
+      <ResponsiveContainer width="100%" height={500}>
+        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+          <XAxis
+            dataKey="name"
+            angle={-45}
+            textAnchor="end"
+            height={120}
+            tick={{ fill: '#9ca3af', fontSize: 10 }}
+            stroke="#27272a"
+            interval={0}
+          />
+          <YAxis
+            tick={{ fill: '#9ca3af' }}
+            stroke="#27272a"
+            domain={['dataMin - 1', 'dataMax + 1']}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Bar dataKey="votes" radius={[4, 4, 0, 0]}>
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={getBarColor(entry.color)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </motion.div>
+  );
+}
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\fingerprint.js
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
+
+class FingerprintService {
+  constructor() {
+    this.fpPromise = null;
+    this.cachedFingerprint = null;
+    this.storageKey = 'llm-tracker-fingerprint';
+  }
+
+  async initialize() {
+    if (!this.fpPromise) {
+      this.fpPromise = FingerprintJS.load();
+    }
+    return this.fpPromise;
+  }
+
+  async getFingerprint() {
+    // Return cached fingerprint if available
+    if (this.cachedFingerprint) {
+      return this.cachedFingerprint;
+    }
+
+    // Try to get from localStorage first
+    const storedFingerprint = this.getStoredFingerprint();
+    if (storedFingerprint) {
+      this.cachedFingerprint = storedFingerprint;
+      return storedFingerprint;
+    }
+
+    // Generate new fingerprint
+    try {
+      const fp = await this.initialize();
+      const result = await fp.get();
+      const fingerprint = result.visitorId;
+      
+      // Store for future use
+      this.storeFingerprint(fingerprint);
+      this.cachedFingerprint = fingerprint;
+      
+      return fingerprint;
+    } catch (error) {
+      console.error('Failed to generate fingerprint:', error);
+      // Fallback to a random ID stored in localStorage
+      return this.generateFallbackFingerprint();
+    }
+  }
+
+  getStoredFingerprint() {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      return localStorage.getItem(this.storageKey);
+    } catch (error) {
+      console.error('Failed to read stored fingerprint:', error);
+      return null;
+    }
+  }
+
+  storeFingerprint(fingerprint) {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      localStorage.setItem(this.storageKey, fingerprint);
+      // Also store in sessionStorage as backup
+      sessionStorage.setItem(this.storageKey, fingerprint);
+    } catch (error) {
+      console.error('Failed to store fingerprint:', error);
+    }
+  }
+
+  generateFallbackFingerprint() {
+    // Generate a random fallback ID
+    const fallbackId = 'fallback_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    this.storeFingerprint(fallbackId);
+    this.cachedFingerprint = fallbackId;
+    return fallbackId;
+  }
+
+  // Get fingerprint with multiple fallback options
+  async getFingerprintWithFallbacks() {
+    // Primary: Generated fingerprint
+    try {
+      return await this.getFingerprint();
+    } catch (error) {
+      console.error('Primary fingerprint failed:', error);
+    }
+
+    // Secondary: SessionStorage
+    try {
+      const sessionFingerprint = sessionStorage.getItem(this.storageKey);
+      if (sessionFingerprint) {
+        this.cachedFingerprint = sessionFingerprint;
+        return sessionFingerprint;
+      }
+    } catch (error) {
+      console.error('SessionStorage fallback failed:', error);
+    }
+
+    // Tertiary: Generate new fallback
+    return this.generateFallbackFingerprint();
+  }
+
+  // Clear stored fingerprint (for testing or user request)
+  clearFingerprint() {
+    this.cachedFingerprint = null;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(this.storageKey);
+        sessionStorage.removeItem(this.storageKey);
+      } catch (error) {
+        console.error('Failed to clear fingerprint:', error);
+      }
+    }
+  }
+}
+
+// Singleton instance
+const fingerprintService = new FingerprintService();
+
+export default fingerprintService;
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\llm-data.js
+export const llmData = [
+  {
+    id: "gpt-4o",
+    name: "GPT-4o",
+    company: "OpenAI",
+    description: "Most advanced multimodal AI with vision, analysis, and coding capabilities",
+    useCases: ["General purpose", "Code generation", "Creative writing", "Vision tasks"],
+    releaseYear: 2024,
+    color: "from-green-500 to-emerald-600",
+    logo: "🤖",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/200px-OpenAI_Logo.svg.png",
+  },
+  {
+    id: "claude-3-5-sonnet",
+    name: "Claude 3.5 Sonnet",
+    company: "Anthropic",
+    description: "Balanced model excelling at analysis, coding, and nuanced conversation",
+    useCases: ["Code analysis", "Research", "Writing", "Complex reasoning"],
+    releaseYear: 2024,
+    color: "from-orange-500 to-amber-600",
+    logo: "🧠",
+    image: "https://www.anthropic.com/_next/static/media/claude-logo.2f5f0b53.svg",
+  },
+  {
+    id: "gemini-ultra",
+    name: "Gemini Ultra",
+    company: "Google",
+    description: "Google's flagship model with strong multimodal and reasoning abilities",
+    useCases: ["Multimodal tasks", "Scientific research", "Code", "Mathematics"],
+    releaseYear: 2024,
+    color: "from-blue-500 to-cyan-600",
+    logo: "💎",
+    image: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
+  },
+  {
+    id: "llama-3-70b",
+    name: "Llama 3 70B",
+    company: "Meta",
+    description: "Open-source powerhouse for customizable AI applications",
+    useCases: ["Open source projects", "Fine-tuning", "Research", "Commercial use"],
+    releaseYear: 2024,
+    color: "from-purple-500 to-violet-600",
+    logo: "🦙",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Meta_Platforms_Inc._logo.svg/200px-Meta_Platforms_Inc._logo.svg.png",
+  },
+  {
+    id: "mistral-large",
+    name: "Mistral Large",
+    company: "Mistral AI",
+    description: "European AI champion with strong multilingual capabilities",
+    useCases: ["Multilingual tasks", "European languages", "Code", "Efficiency"],
+    releaseYear: 2024,
+    color: "from-red-500 to-pink-600",
+    logo: "🌪️",
+    image: "https://docs.mistral.ai/img/logo.svg",
+  },
+  {
+    id: "command-r-plus",
+    name: "Command R+",
+    company: "Cohere",
+    description: "Enterprise-focused with excellent retrieval and grounding",
+    useCases: ["Enterprise search", "RAG systems", "Document analysis", "Business"],
+    releaseYear: 2024,
+    color: "from-indigo-500 to-blue-600",
+    logo: "📊",
+    image: "https://cohere.com/favicon.svg",
+  },
+  {
+    id: "grok",
+    name: "Grok",
+    company: "xAI",
+    description: "Real-time knowledge with humor and unconventional responses",
+    useCases: ["Real-time info", "Social media", "Humor", "Current events"],
+    releaseYear: 2023,
+    color: "from-gray-600 to-slate-700",
+    logo: "🚀",
+    image: "https://grok.x.ai/assets/grok-logo-light.svg",
+  },
+  {
+    id: "perplexity",
+    name: "Perplexity",
+    company: "Perplexity AI",
+    description: "Search-enhanced AI with real-time web access and citations",
+    useCases: ["Web search", "Research", "Fact-checking", "Citations"],
+    releaseYear: 2024,
+    color: "from-teal-500 to-cyan-600",
+    logo: "🔍",
+    image: "https://www.perplexity.ai/favicon.svg",
+  },
+  {
+    id: "qwen-2-5",
+    name: "Qwen 2.5",
+    company: "Alibaba",
+    description: "Strong Asian language support with competitive performance",
+    useCases: ["Chinese language", "Asian markets", "E-commerce", "Translation"],
+    releaseYear: 2024,
+    color: "from-yellow-500 to-orange-600",
+    logo: "🐉",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Alibaba-Logo.svg/200px-Alibaba-Logo.svg.png",
+  },
+  {
+    id: "deepseek-coder",
+    name: "DeepSeek Coder",
+    company: "DeepSeek",
+    description: "Specialized coding model with excellent debugging capabilities",
+    useCases: ["Code generation", "Debugging", "Code review", "Documentation"],
+    releaseYear: 2024,
+    color: "from-green-600 to-teal-700",
+    logo: "💻",
+    image: "https://github.com/deepseek-ai.png",
+  },
+  {
+    id: "phi-3",
+    name: "Phi-3",
+    company: "Microsoft",
+    description: "Small but mighty model optimized for edge deployment",
+    useCases: ["Edge computing", "Mobile apps", "Low resource", "Fast inference"],
+    releaseYear: 2024,
+    color: "from-blue-600 to-indigo-700",
+    logo: "⚡",
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png",
+  },
+  {
+    id: "falcon-180b",
+    name: "Falcon 180B",
+    company: "TII UAE",
+    description: "Open-source giant with strong performance across tasks",
+    useCases: ["Open source", "Research", "Arabic language", "General purpose"],
+    releaseYear: 2023,
+    color: "from-amber-600 to-yellow-700",
+    logo: "🦅",
+    image: "https://www.tii.ae/sites/default/files/2022-12/TII-logo-WHITE.png",
+  },
+  {
+    id: "vicuna-33b",
+    name: "Vicuna-33B",
+    company: "LMSYS",
+    description: "Fine-tuned Llama model with improved conversational abilities",
+    useCases: ["Chatbots", "Open source", "Fine-tuning base", "Research"],
+    releaseYear: 2023,
+    color: "from-pink-500 to-rose-600",
+    logo: "🦌",
+    image: "https://github.com/lm-sys.png",
+  },
+  {
+    id: "solar-10-7b",
+    name: "SOLAR-10.7B",
+    company: "Upstage AI",
+    description: "Efficient Korean model with strong multilingual capabilities",
+    useCases: ["Korean language", "Efficient inference", "Asian languages", "Small models"],
+    releaseYear: 2024,
+    color: "from-orange-600 to-red-700",
+    logo: "☀️",
+    image: "https://github.com/UpstageAI.png",
+  },
+  {
+    id: "yi-34b",
+    name: "Yi-34B",
+    company: "01.AI",
+    description: "Bilingual model excelling in Chinese and English tasks",
+    useCases: ["Chinese-English", "Translation", "Bilingual tasks", "Open source"],
+    releaseYear: 2024,
+    color: "from-purple-600 to-pink-700",
+    logo: "🎭",
+    image: "https://github.com/01-ai.png",
+  },
+  {
+    id: "mixtral-8x7b",
+    name: "Mixtral 8x7B",
+    company: "Mistral AI",
+    description: "Mixture of experts model with excellent efficiency",
+    useCases: ["Efficient inference", "MoE architecture", "Code", "Multiple languages"],
+    releaseYear: 2024,
+    color: "from-violet-600 to-purple-700",
+    logo: "🎨",
+    image: "https://docs.mistral.ai/img/logo.svg",
+  },
+  {
+    id: "bard",
+    name: "Bard (Gemini Pro)",
+    company: "Google",
+    description: "Google's conversational AI with web access and multimodal features",
+    useCases: ["Web browsing", "Conversation", "Creative tasks", "Integration"],
+    releaseYear: 2024,
+    color: "from-blue-500 to-green-600",
+    logo: "🎭",
+    image: "https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg",
+  },
+  {
+    id: "ernie-4",
+    name: "ERNIE 4.0",
+    company: "Baidu",
+    description: "Chinese AI leader with strong understanding of Chinese culture",
+    useCases: ["Chinese market", "Cultural context", "Search", "Business"],
+    releaseYear: 2024,
+    color: "from-red-600 to-orange-700",
+    logo: "🏮",
+    image: "https://upload.wikimedia.org/wikipedia/en/thumb/3/37/Baidu_Logo.svg/200px-Baidu_Logo.svg.png",
+  },
+  {
+    id: "stablelm-2",
+    name: "StableLM 2",
+    company: "Stability AI",
+    description: "Open model from the makers of Stable Diffusion",
+    useCases: ["Open source", "Customization", "Research", "Creative apps"],
+    releaseYear: 2024,
+    color: "from-purple-500 to-indigo-600",
+    logo: "🎯",
+    image: "https://github.com/Stability-AI.png",
+  },
+  {
+    id: "inflection-2-5",
+    name: "Inflection-2.5",
+    company: "Inflection AI",
+    description: "Personal AI with empathetic and supportive conversation style",
+    useCases: ["Personal assistant", "Emotional support", "Coaching", "Companionship"],
+    releaseYear: 2024,
+    color: "from-teal-600 to-blue-700",
+    logo: "💬",
+    image: "https://github.com/InflectionAI.png",
+  },
+];
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\supabase\client.js
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase credentials not found. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
+}
+
+export const supabase = createClient(
+  supabaseUrl || '',
+  supabaseAnonKey || '',
+  {
+    auth: {
+      persistSession: false
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    },
+    global: {
+      headers: {
+        'x-application-name': 'llm-popularity-tracker'
+      }
+    }
+  }
+)
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\supabase\vote-manager.js
+import { supabase } from './client'
+
+class SupabaseVoteManager {
+  constructor() {
+    this.channel = null
+    this.subscriptions = new Map()
+  }
+
+  // Initialize optimized realtime subscriptions (only aggregates, not individual votes)
+  async initializeRealtime(onVoteUpdate, onStatsUpdate) {
+    try {
+      this.channel = supabase
+        .channel('optimized-votes')
+        // Listen to aggregate updates only (much fewer events)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'vote_stats_aggregate'
+        }, (payload) => {
+          console.log('📊 Aggregate update received:', payload.new?.llm_id)
+          // Only update the specific LLM that changed
+          if (onVoteUpdate && payload.new) {
+            onVoteUpdate({
+              llmId: payload.new.llm_id,
+              votes: payload.new.total_votes,
+              upvotes: payload.new.upvotes,
+              downvotes: payload.new.downvotes,
+              uniqueVoters: payload.new.unique_voters
+            })
+          }
+        })
+        // Listen to global stats updates
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'global_stats'
+        }, (payload) => {
+          console.log('🌍 Global stats update received')
+          if (onStatsUpdate && payload.new) {
+            onStatsUpdate({
+              totalVotes: payload.new.total_votes,
+              uniqueVoters: payload.new.unique_voters,
+              votesLastHour: payload.new.votes_last_hour,
+              votesToday: payload.new.votes_today,
+              topModel: payload.new.top_model,
+              topModelVotes: payload.new.top_model_votes
+            })
+          }
+        })
+        .subscribe((status) => {
+          console.log('✅ Realtime subscription status:', status)
+        })
+
+      return true
+    } catch (error) {
+      console.error('❌ Failed to initialize realtime:', error)
+      return false
+    }
+  }
+
+  // Submit or update a vote
+  async vote(llmId, fingerprint, voteType, metadata = {}) {
+    try {
+      // If vote is 0, remove the vote
+      if (voteType === 0) {
+        const { error } = await supabase
+          .from('votes')
+          .delete()
+          .eq('llm_id', llmId)
+          .eq('fingerprint', fingerprint)
+
+        if (error) throw error
+
+        return {
+          success: true,
+          previousVote: null,
+          newVote: 0,
+          voteCount: 0
+        }
+      }
+
+      // Otherwise, call the database function to handle vote logic
+      const { data, error } = await supabase
+        .rpc('handle_vote', {
+          p_llm_id: llmId,
+          p_fingerprint: fingerprint,
+          p_vote_type: voteType,
+          p_ip_address: metadata.ip || null,
+          p_user_agent: metadata.userAgent || null
+        })
+
+      if (error) throw error
+
+      return {
+        success: data.success,
+        previousVote: data.previous_vote,
+        newVote: data.new_vote,
+        voteCount: data.vote_count
+      }
+    } catch (error) {
+      console.error('Vote failed:', error)
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  }
+
+  // Get all vote counts from optimized aggregate table
+  async getVoteCounts() {
+    try {
+      const { data, error } = await supabase
+        .from('vote_stats_aggregate')
+        .select('llm_id, total_votes')
+        .order('total_votes', { ascending: false })
+
+      if (error) throw error
+
+      // Transform to object format
+      const votes = {}
+      data.forEach(item => {
+        votes[item.llm_id] = item.total_votes || 0
+      })
+
+      return votes
+    } catch (error) {
+      console.error('Failed to get vote counts:', error)
+      return {}
+    }
+  }
+
+  // Get user's votes
+  async getUserVotes(fingerprint) {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_user_votes', {
+          p_fingerprint: fingerprint
+        })
+
+      if (error) throw error
+      return data || {}
+    } catch (error) {
+      console.error('Failed to get user votes:', error)
+      return {}
+    }
+  }
+
+  // Get all LLMs with vote counts from aggregate table
+  async getLLMsWithVotes() {
+    try {
+      const { data, error } = await supabase
+        .from('vote_stats_aggregate')
+        .select(`
+          llm_id,
+          total_votes,
+          upvotes,
+          downvotes,
+          unique_voters,
+          llms!inner(
+            name,
+            company,
+            description,
+            logo,
+            image,
+            color,
+            release_year,
+            use_cases
+          )
+        `)
+        .order('total_votes', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Failed to get LLMs with votes:', error)
+      return []
+    }
+  }
+
+  // Get rankings from aggregate table
+  async getRankings() {
+    try {
+      const { data, error } = await supabase
+        .from('vote_stats_aggregate')
+        .select('llm_id, total_votes')
+        .order('total_votes', { ascending: false })
+        .limit(10)
+
+      if (error) throw error
+
+      // Map to ranking format
+      return (data || []).map((item, index) => ({
+        id: item.llm_id,
+        name: item.llm_id, // The store will resolve this to the actual name
+        count: item.total_votes || 0,
+        rank: index + 1
+      }))
+    } catch (error) {
+      console.error('Failed to get rankings:', error)
+      return []
+    }
+  }
+
+  // Get statistics from optimized global stats table
+  async getStats() {
+    try {
+      const { data, error } = await supabase
+        .from('global_stats')
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      // Get top model name if we have one
+      let topModelName = null
+      if (data?.top_model) {
+        const { data: llmData } = await supabase
+          .from('llms')
+          .select('name')
+          .eq('id', data.top_model)
+          .single()
+        
+        topModelName = llmData?.name || data.top_model
+      }
+
+      return {
+        totalVotes: data?.total_votes || 0,
+        uniqueVoters: data?.unique_voters || 0,
+        votesLastHour: data?.votes_last_hour || 0,
+        votesToday: data?.votes_today || 0,
+        topModel: topModelName,
+        topModelVotes: data?.top_model_votes || 0,
+        lastUpdated: data?.last_updated || new Date().toISOString()
+      }
+    } catch (error) {
+      console.error('Failed to get stats:', error)
+      return {
+        totalVotes: 0,
+        uniqueVoters: 0,
+        votesLastHour: 0,
+        votesToday: 0,
+        topModel: null,
+        topModelVotes: 0,
+        lastUpdated: new Date().toISOString()
+      }
+    }
+  }
+
+  // Sync user data
+  async syncUserData(fingerprint) {
+    try {
+      // Get user votes
+      const userVotes = await this.getUserVotes(fingerprint)
+      
+      // Get all vote counts
+      const voteCounts = await this.getVoteCounts()
+      
+      // Get rankings
+      const rankings = await this.getRankings()
+      
+      // Get stats
+      const stats = await this.getStats()
+
+      return {
+        success: true,
+        userVotes,
+        votes: voteCounts,
+        rankings,
+        stats
+      }
+    } catch (error) {
+      console.error('Failed to sync user data:', error)
+      return {
+        success: false,
+        error: error.message
+      }
+    }
+  }
+
+  // Clean up subscriptions
+  cleanup() {
+    if (this.channel) {
+      supabase.removeChannel(this.channel)
+      this.channel = null
+    }
+    this.subscriptions.clear()
+  }
+}
+
+// Export singleton instance
+export const voteManager = new SupabaseVoteManager()
+export default voteManager
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\store\useVoteStore.js
+import { create } from 'zustand';
+import { llmData } from '@/lib/llm-data';
+import fingerprintService from '@/lib/fingerprint';
+import voteManager from '@/lib/supabase/vote-manager';
+
+const useVoteStore = create((set, get) => ({
+  llms: llmData,
+  votes: {},
+  userVotes: {},
+  rankings: [],
+  stats: {
+    totalVotes: 0,
+    uniqueVoters: 0,
+    votesLastHour: 0,
+    votesToday: 0,
+    topModel: null,
+    topModelVotes: 0,
+  },
+  loading: false,
+  error: null,
+  lastUpdate: null,
+  fingerprint: null,
+  realtimeConnected: false,
+  
+  // Initialize votes and real-time connection
+  initializeVotes: async () => {
+    console.log('🚀 Initializing Supabase vote store...');
+    set({ loading: true, error: null });
+    
+    try {
+      // Get fingerprint
+      const fingerprint = await fingerprintService.getFingerprintWithFallbacks();
+      console.log('🔍 Fingerprint obtained:', fingerprint.substring(0, 8) + '...');
+      set({ fingerprint });
+      
+      // Sync initial data
+      const syncResult = await voteManager.syncUserData(fingerprint);
+      
+      if (syncResult.success) {
+        set({
+          votes: syncResult.votes || {},
+          userVotes: syncResult.userVotes || {},
+          rankings: syncResult.rankings || [],
+          stats: syncResult.stats || get().stats,
+          loading: false,
+          lastUpdate: new Date(),
+        });
+        
+        // Initialize real-time subscriptions with optimized partial updates
+        const realtimeSuccess = await voteManager.initializeRealtime(
+          // Partial vote update - only update the specific LLM that changed
+          (voteUpdate) => {
+            console.log('📡 Real-time aggregate update for:', voteUpdate.llmId);
+            const currentVotes = get().votes;
+            set({ 
+              votes: {
+                ...currentVotes,
+                [voteUpdate.llmId]: voteUpdate.votes
+              },
+              lastUpdate: new Date()
+            });
+            get().updateRankings();
+          },
+          // Global stats update
+          (statsUpdate) => {
+            console.log('📊 Real-time global stats update');
+            set({ 
+              stats: {
+                totalVotes: statsUpdate.totalVotes || 0,
+                uniqueVoters: statsUpdate.uniqueVoters || 0,
+                votesLastHour: statsUpdate.votesLastHour || 0,
+                votesToday: statsUpdate.votesToday || 0,
+                topModel: statsUpdate.topModel,
+                topModelVotes: statsUpdate.topModelVotes || 0
+              }
+            });
+          }
+        );
+        
+        set({ realtimeConnected: realtimeSuccess });
+        console.log('✅ Vote store initialized with real-time:', realtimeSuccess);
+      } else {
+        throw new Error(syncResult.error || 'Failed to sync data');
+      }
+    } catch (error) {
+      console.error('❌ Failed to initialize:', error);
+      set({ 
+        loading: false, 
+        error: 'Failed to connect to voting system',
+      });
+      
+      // Initialize with zero votes as fallback
+      const initialVotes = {};
+      llmData.forEach(llm => {
+        initialVotes[llm.id] = 0;
+      });
+      set({ votes: initialVotes });
+    }
+  },
+  
+  // Vote for an LLM
+  vote: async (llmId, voteType) => {
+    console.log('🗳️ Voting:', { llmId, voteType });
+    
+    const fingerprint = get().fingerprint;
+    if (!fingerprint) {
+      console.error('No fingerprint available');
+      return;
+    }
+    
+    const currentUserVote = get().userVotes[llmId] || 0;
+    
+    // Don't vote if it's the same
+    if (currentUserVote === voteType) {
+      console.log('Same vote, ignoring');
+      return;
+    }
+    
+    // Optimistic update
+    const optimisticVotes = { ...get().votes };
+    const optimisticUserVotes = { ...get().userVotes };
+    
+    // Calculate vote change
+    const voteChange = voteType - currentUserVote;
+    optimisticVotes[llmId] = (optimisticVotes[llmId] || 0) + voteChange;
+    
+    // Update user vote
+    if (voteType === 0) {
+      delete optimisticUserVotes[llmId];
+    } else {
+      optimisticUserVotes[llmId] = voteType;
+    }
+    
+    set({ 
+      votes: optimisticVotes,
+      userVotes: optimisticUserVotes,
+    });
+    
+    try {
+      // Submit vote to Supabase
+      const result = await voteManager.vote(
+        llmId, 
+        fingerprint, 
+        voteType,
+        {
+          ip: window.location.hostname,
+          userAgent: navigator.userAgent
+        }
+      );
+      
+      if (!result.success) {
+        // Revert optimistic update on failure
+        console.error('Vote failed:', result.error);
+        
+        const revertedVotes = { ...get().votes };
+        revertedVotes[llmId] = (revertedVotes[llmId] || 0) - voteChange;
+        
+        const revertedUserVotes = { ...get().userVotes };
+        if (currentUserVote === 0) {
+          delete revertedUserVotes[llmId];
+        } else {
+          revertedUserVotes[llmId] = currentUserVote;
+        }
+        
+        set({ 
+          votes: revertedVotes,
+          userVotes: revertedUserVotes,
+          error: result.error || 'Failed to submit vote'
+        });
+        
+        setTimeout(() => set({ error: null }), 3000);
+      } else {
+        console.log('✅ Vote successful');
+        // Real-time will handle the update
+        get().updateRankings();
+      }
+    } catch (error) {
+      console.error('❌ Vote error:', error);
+      // Keep optimistic update but show error
+      set({ error: 'Vote may not have been saved' });
+      setTimeout(() => set({ error: null }), 3000);
+    }
+  },
+  
+  // Update rankings based on votes
+  updateRankings: () => {
+    const votes = get().votes;
+    const rankings = Object.entries(votes)
+      .map(([id, count]) => ({ 
+        id, 
+        count,
+        name: get().getLLMById(id)?.name || id
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map((item, index) => ({ ...item, rank: index + 1 }));
+    
+    set({ rankings });
+  },
+  
+  // Fetch latest stats
+  fetchStats: async () => {
+    try {
+      const stats = await voteManager.getStats();
+      set({ stats, lastUpdate: new Date() });
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  },
+  
+  // Get LLM by ID
+  getLLMById: (id) => {
+    return get().llms.find(llm => llm.id === id);
+  },
+  
+  // Get user's vote for an LLM
+  getUserVote: (llmId) => {
+    return get().userVotes[llmId] || 0;
+  },
+  
+  // Get total votes for an LLM
+  getVoteCount: (llmId) => {
+    return get().votes[llmId] || 0;
+  },
+  
+  // Check if LLM is trending (top 3)
+  isTrending: (llmId) => {
+    const rankings = get().rankings;
+    const item = rankings.find(r => r.id === llmId);
+    return item ? item.rank <= 3 : false;
+  },
+  
+  // Get rank position for an LLM
+  getRank: (llmId) => {
+    const rankings = get().rankings;
+    const item = rankings.find(r => r.id === llmId);
+    return item ? item.rank : null;
+  },
+  
+  // Manual sync with server
+  syncWithServer: async () => {
+    const fingerprint = get().fingerprint;
+    if (!fingerprint) return;
+    
+    try {
+      const syncResult = await voteManager.syncUserData(fingerprint);
+      if (syncResult.success) {
+        set({
+          votes: syncResult.votes || get().votes,
+          userVotes: syncResult.userVotes || get().userVotes,
+          rankings: syncResult.rankings || get().rankings,
+          stats: syncResult.stats || get().stats,
+          lastUpdate: new Date(),
+        });
+      }
+    } catch (error) {
+      console.debug('Sync failed:', error);
+    }
+  },
+  
+  // Clear all data (for testing)
+  clearAllStoredData: () => {
+    fingerprintService.clearFingerprint();
+    set({
+      votes: {},
+      userVotes: {},
+      fingerprint: null,
+      rankings: [],
+      stats: {
+        totalVotes: 0,
+        uniqueVoters: 0,
+        votesLastHour: 0,
+        votesToday: 0,
+        topModel: null,
+        topModelVotes: 0,
+      }
+    });
+  },
+  
+  // Cleanup on unmount
+  cleanup: () => {
+    voteManager.cleanup();
+    set({ realtimeConnected: false });
+  }
+}));
+
+export default useVoteStore;
+
+// File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\supabase\schema.sql
+-- ============================================
+-- STEP 2: CREATE CORE TABLES
+-- ============================================
+
+-- Create LLMs table
+CREATE TABLE llms (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  company TEXT NOT NULL,
+  description TEXT,
+  logo TEXT,
+  image TEXT,
+  color TEXT,
+  release_year INTEGER,
+  use_cases TEXT[],
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create votes table with fingerprint-based voting
+CREATE TABLE votes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  llm_id TEXT NOT NULL REFERENCES llms(id) ON DELETE CASCADE,
+  fingerprint TEXT NOT NULL,
+  vote_type INTEGER NOT NULL CHECK (vote_type IN (-1, 1)),
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(llm_id, fingerprint)
+);
+
+-- Create sessions table for tracking users
+CREATE TABLE sessions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  fingerprint TEXT UNIQUE NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  vote_count INTEGER DEFAULT 0,
+  last_activity TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- STEP 3: CREATE AGGREGATE TABLES
+-- ============================================
+
+-- Create aggregated stats table (updates every 5 seconds)
+CREATE TABLE vote_stats_aggregate (
+  llm_id TEXT PRIMARY KEY,
+  total_votes INTEGER DEFAULT 0,
+  upvotes INTEGER DEFAULT 0,
+  downvotes INTEGER DEFAULT 0,
+  unique_voters INTEGER DEFAULT 0,
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create global stats table
+CREATE TABLE global_stats (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  total_votes INTEGER DEFAULT 0,
+  unique_voters INTEGER DEFAULT 0,
+  votes_last_hour INTEGER DEFAULT 0,
+  votes_today INTEGER DEFAULT 0,
+  top_model TEXT,
+  top_model_votes INTEGER DEFAULT 0,
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CHECK (id = 1)
+);
+
+-- Initialize global stats row
+INSERT INTO global_stats (id) VALUES (1);
+
+-- ============================================
+-- STEP 4: CREATE VIEWS
+-- ============================================
+
+-- Create view for backward compatibility
+CREATE VIEW vote_counts AS
+SELECT 
+  l.id as llm_id,
+  l.name,
+  l.company,
+  COALESCE(SUM(v.vote_type), 0) as total_votes,
+  COUNT(CASE WHEN v.vote_type = 1 THEN 1 END) as upvotes,
+  COUNT(CASE WHEN v.vote_type = -1 THEN 1 END) as downvotes,
+  COUNT(DISTINCT v.fingerprint) as unique_voters
+FROM llms l
+LEFT JOIN votes v ON l.id = v.llm_id
+GROUP BY l.id, l.name, l.company
+ORDER BY total_votes DESC;
+
+-- ============================================
+-- STEP 5: CREATE FUNCTIONS
+-- ============================================
+
+-- Function to update aggregates (called periodically)
+CREATE OR REPLACE FUNCTION update_vote_aggregates() 
+RETURNS void 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Update per-LLM stats
+  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
+  SELECT 
+    l.id as llm_id,
+    COALESCE(SUM(v.vote_type), 0) as total_votes,
+    COALESCE(COUNT(CASE WHEN v.vote_type = 1 THEN 1 END), 0) as upvotes,
+    COALESCE(COUNT(CASE WHEN v.vote_type = -1 THEN 1 END), 0) as downvotes,
+    COALESCE(COUNT(DISTINCT v.fingerprint), 0) as unique_voters
+  FROM llms l
+  LEFT JOIN votes v ON l.id = v.llm_id
+  GROUP BY l.id
+  ON CONFLICT (llm_id) DO UPDATE SET
+    total_votes = EXCLUDED.total_votes,
+    upvotes = EXCLUDED.upvotes,
+    downvotes = EXCLUDED.downvotes,
+    unique_voters = EXCLUDED.unique_voters,
+    last_updated = NOW();
+    
+  -- Update global stats
+  UPDATE global_stats SET
+    total_votes = (SELECT COUNT(*) FROM votes),
+    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes),
+    votes_last_hour = (
+      SELECT COUNT(*) FROM votes 
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+    ),
+    votes_today = (
+      SELECT COUNT(*) FROM votes 
+      WHERE created_at > CURRENT_DATE
+    ),
+    top_model = (
+      SELECT llm_id FROM vote_stats_aggregate 
+      ORDER BY total_votes DESC 
+      LIMIT 1
+    ),
+    top_model_votes = (
+      SELECT total_votes FROM vote_stats_aggregate 
+      ORDER BY total_votes DESC 
+      LIMIT 1
+    ),
+    last_updated = NOW()
+  WHERE id = 1;
+END;
+$$;
+
+-- Function to handle vote updates with aggregate optimization
+CREATE OR REPLACE FUNCTION handle_vote(
+  p_llm_id TEXT,
+  p_fingerprint TEXT,
+  p_vote_type INTEGER,
+  p_ip_address TEXT DEFAULT NULL,
+  p_user_agent TEXT DEFAULT NULL
+) RETURNS JSON AS $$
+DECLARE
+  v_previous_vote INTEGER;
+  v_result JSON;
+BEGIN
+  -- Get previous vote if exists
+  SELECT vote_type INTO v_previous_vote
+  FROM votes
+  WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint;
+  
+  -- If same vote, do nothing
+  IF v_previous_vote = p_vote_type THEN
+    RETURN json_build_object(
+      'success', false,
+      'message', 'Vote unchanged',
+      'previous_vote', v_previous_vote
+    );
+  END IF;
+  
+  -- Handle vote deletion (vote_type = 0)
+  IF p_vote_type = 0 THEN
+    DELETE FROM votes 
+    WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint;
+  ELSE
+    -- Insert or update vote
+    INSERT INTO votes (llm_id, fingerprint, vote_type, ip_address, user_agent)
+    VALUES (p_llm_id, p_fingerprint, p_vote_type, p_ip_address, p_user_agent)
+    ON CONFLICT (llm_id, fingerprint)
+    DO UPDATE SET 
+      vote_type = EXCLUDED.vote_type,
+      updated_at = NOW();
+  END IF;
+  
+  -- Update session activity
+  INSERT INTO sessions (fingerprint, ip_address, user_agent, vote_count)
+  VALUES (p_fingerprint, p_ip_address, p_user_agent, 1)
+  ON CONFLICT (fingerprint)
+  DO UPDATE SET 
+    vote_count = sessions.vote_count + 1,
+    last_activity = NOW();
+  
+  -- Update aggregate for this specific LLM immediately
+  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
+  SELECT 
+    p_llm_id,
+    COALESCE(SUM(vote_type), 0),
+    COUNT(CASE WHEN vote_type = 1 THEN 1 END),
+    COUNT(CASE WHEN vote_type = -1 THEN 1 END),
+    COUNT(DISTINCT fingerprint)
+  FROM votes
+  WHERE llm_id = p_llm_id
+  ON CONFLICT (llm_id) DO UPDATE SET
+    total_votes = (SELECT COALESCE(SUM(vote_type), 0) FROM votes WHERE llm_id = p_llm_id),
+    upvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = 1),
+    downvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = -1),
+    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes WHERE llm_id = p_llm_id),
+    last_updated = NOW();
+  
+  -- Return success with vote counts from aggregate table
+  SELECT json_build_object(
+    'success', true,
+    'previous_vote', v_previous_vote,
+    'new_vote', p_vote_type,
+    'vote_count', (SELECT total_votes FROM vote_stats_aggregate WHERE llm_id = p_llm_id)
+  ) INTO v_result;
+  
+  RETURN v_result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get user votes
+CREATE OR REPLACE FUNCTION get_user_votes(p_fingerprint TEXT)
+RETURNS JSON AS $$
+BEGIN
+  RETURN json_object_agg(llm_id, vote_type)
+  FROM votes
+  WHERE fingerprint = p_fingerprint;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- STEP 6: ENABLE ROW LEVEL SECURITY
+-- ============================================
+
+ALTER TABLE llms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vote_stats_aggregate ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_stats ENABLE ROW LEVEL SECURITY;
+
+-- ============================================
+-- STEP 7: CREATE POLICIES
+-- ============================================
+
+-- LLMs policies
+CREATE POLICY "Public can read LLMs" ON llms
+  FOR SELECT USING (true);
+
+-- Votes policies  
+CREATE POLICY "Public can read votes" ON votes
+  FOR SELECT USING (true);
+
+CREATE POLICY "Public can insert votes" ON votes
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Public can update own votes" ON votes
+  FOR UPDATE USING (true);
+
+CREATE POLICY "Public can delete votes" ON votes
+  FOR DELETE USING (true);
+
+-- Sessions policies
+CREATE POLICY "Public can read sessions" ON sessions
+  FOR SELECT USING (true);
+
+CREATE POLICY "Public can insert/update sessions" ON sessions
+  FOR ALL USING (true);
+
+-- Aggregate tables policies
+CREATE POLICY "Public can read vote aggregates" ON vote_stats_aggregate
+  FOR SELECT USING (true);
+
+CREATE POLICY "Public can read global stats" ON global_stats
+  FOR SELECT USING (true);
+
+-- ============================================
+-- STEP 8: CREATE INDEXES
+-- ============================================
+
+CREATE INDEX idx_votes_llm_id ON votes(llm_id);
+CREATE INDEX idx_votes_fingerprint ON votes(fingerprint);
+CREATE INDEX idx_votes_created_at ON votes(created_at DESC);
+CREATE INDEX idx_sessions_fingerprint ON sessions(fingerprint);
+CREATE INDEX idx_vote_stats_aggregate_total_votes ON vote_stats_aggregate(total_votes DESC);
+CREATE INDEX idx_vote_stats_aggregate_last_updated ON vote_stats_aggregate(last_updated DESC);
+
+-- ============================================
+-- STEP 9: CONFIGURE REALTIME
+-- ============================================
+
+-- Enable Realtime for aggregate tables only (not votes table for performance)
+ALTER PUBLICATION supabase_realtime ADD TABLE vote_stats_aggregate;
+ALTER PUBLICATION supabase_realtime ADD TABLE global_stats;
+
+-- ============================================
+-- STEP 10: INSERT LLM DATA
+-- ============================================
+
+INSERT INTO llms (id, name, company, description, logo, image, color, release_year, use_cases) VALUES
+('gpt-4o', 'GPT-4o', 'OpenAI', 'Most advanced multimodal AI with vision, analysis, and coding capabilities', '🤖', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/200px-OpenAI_Logo.svg.png', 'from-green-500 to-emerald-600', 2024, ARRAY['General purpose', 'Code generation', 'Creative writing', 'Vision tasks']),
+('claude-3-5-sonnet', 'Claude 3.5 Sonnet', 'Anthropic', 'Balanced model excelling at analysis, coding, and nuanced conversation', '🧠', 'https://www.anthropic.com/_next/static/media/claude-logo.2f5f0b53.svg', 'from-orange-500 to-amber-600', 2024, ARRAY['Code analysis', 'Research', 'Writing', 'Complex reasoning']),
+('gemini-ultra', 'Gemini Ultra', 'Google', 'Google''s flagship model with strong multimodal and reasoning abilities', '💎', 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg', 'from-blue-500 to-cyan-600', 2024, ARRAY['Multimodal tasks', 'Scientific research', 'Code', 'Mathematics']),
+('llama-3-70b', 'Llama 3 70B', 'Meta', 'Open-source powerhouse for customizable AI applications', '🦙', 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Meta_Platforms_Inc._logo.svg/200px-Meta_Platforms_Inc._logo.svg.png', 'from-purple-500 to-violet-600', 2024, ARRAY['Open source projects', 'Fine-tuning', 'Research', 'Commercial use']),
+('mistral-large', 'Mistral Large', 'Mistral AI', 'European AI champion with strong multilingual capabilities', '🌪️', 'https://docs.mistral.ai/img/logo.svg', 'from-red-500 to-pink-600', 2024, ARRAY['Multilingual tasks', 'European languages', 'Code', 'Efficiency']),
+('command-r-plus', 'Command R+', 'Cohere', 'Enterprise-focused with excellent retrieval and grounding', '📊', 'https://cohere.com/favicon.svg', 'from-indigo-500 to-blue-600', 2024, ARRAY['Enterprise search', 'RAG systems', 'Document analysis', 'Business']),
+('grok', 'Grok', 'xAI', 'Real-time knowledge with humor and unconventional responses', '🚀', 'https://grok.x.ai/assets/grok-logo-light.svg', 'from-gray-600 to-slate-700', 2023, ARRAY['Real-time info', 'Social media', 'Humor', 'Current events']),
+('perplexity', 'Perplexity', 'Perplexity AI', 'Search-enhanced AI with real-time web access and citations', '🔍', 'https://www.perplexity.ai/favicon.svg', 'from-teal-500 to-cyan-600', 2024, ARRAY['Web search', 'Research', 'Fact-checking', 'Citations']),
+('qwen-2-5', 'Qwen 2.5', 'Alibaba', 'Strong Asian language support with competitive performance', '🐉', 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Alibaba-Logo.svg/200px-Alibaba-Logo.svg.png', 'from-yellow-500 to-orange-600', 2024, ARRAY['Chinese language', 'Asian markets', 'E-commerce', 'Translation']),
+('deepseek-coder', 'DeepSeek Coder', 'DeepSeek', 'Specialized coding model with excellent debugging capabilities', '💻', 'https://github.com/deepseek-ai.png', 'from-green-600 to-teal-700', 2024, ARRAY['Code generation', 'Debugging', 'Code review', 'Documentation']),
+('phi-3', 'Phi-3', 'Microsoft', 'Small but mighty model optimized for edge deployment', '⚡', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png', 'from-blue-600 to-indigo-700', 2024, ARRAY['Edge computing', 'Mobile apps', 'Low resource', 'Fast inference']),
+('falcon-180b', 'Falcon 180B', 'TII UAE', 'Open-source giant with strong performance across tasks', '🦅', 'https://www.tii.ae/sites/default/files/2022-12/TII-logo-WHITE.png', 'from-amber-600 to-yellow-700', 2023, ARRAY['Open source', 'Research', 'Arabic language', 'General purpose']),
+('vicuna-33b', 'Vicuna-33B', 'LMSYS', 'Fine-tuned Llama model with improved conversational abilities', '🦌', 'https://github.com/lm-sys.png', 'from-pink-500 to-rose-600', 2023, ARRAY['Chatbots', 'Open source', 'Fine-tuning base', 'Research']),
+('solar-10-7b', 'SOLAR-10.7B', 'Upstage AI', 'Efficient Korean model with strong multilingual capabilities', '☀️', 'https://github.com/upstage-ai.png', 'from-orange-500 to-red-600', 2023, ARRAY['Korean language', 'Efficient inference', 'Asian languages', 'Small models']),
+('yi-34b', 'Yi-34B', '01.AI', 'Bilingual model excelling in Chinese and English tasks', '🎯', 'https://github.com/01-ai.png', 'from-purple-600 to-blue-600', 2023, ARRAY['Bilingual tasks', 'Chinese AI', 'Long context', 'Reasoning']),
+('mixtral-8x7b', 'Mixtral 8x7B', 'Mistral AI', 'MoE architecture for efficient high-performance inference', '🔀', 'https://docs.mistral.ai/img/logo.svg', 'from-cyan-500 to-blue-600', 2023, ARRAY['Mixture of Experts', 'Efficient scaling', 'Code tasks', 'Multi-language']),
+('stablelm-2', 'StableLM 2', 'Stability AI', 'Open model optimized for transparency and customization', '🏔️', 'https://github.com/stability-ai.png', 'from-indigo-500 to-purple-600', 2024, ARRAY['Open weights', 'Research friendly', 'Customization', 'Transparency']),
+('internlm-2', 'InternLM 2', 'Shanghai AI Lab', 'Chinese model with strong reasoning and tool use', '🌐', 'https://github.com/internlm.png', 'from-blue-500 to-green-600', 2024, ARRAY['Tool use', 'Chinese tasks', 'Mathematical reasoning', 'Code']),
+('wizardlm-2', 'WizardLM 2', 'Microsoft', 'Instruction-following model with complex reasoning', '🧙', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png', 'from-purple-500 to-pink-600', 2024, ARRAY['Instructions', 'Complex tasks', 'Step-by-step', 'Education']),
+('openchat-3-5', 'OpenChat 3.5', 'OpenChat', 'Community model achieving GPT-3.5 level performance', '💬', 'https://github.com/imoneoi.png', 'from-green-500 to-blue-600', 2024, ARRAY['Open source', 'Chat optimization', 'Community driven', 'Efficient']);
+
+-- ============================================
+-- STEP 11: INITIALIZE AGGREGATES
+-- ============================================
+
+-- Run initial population of aggregates
+SELECT update_vote_aggregates();
+
+-- ============================================
+-- DONE! 
+-- ============================================
+
+DO $$ 
+BEGIN
+  RAISE NOTICE 'Fresh installation completed successfully!';
+  RAISE NOTICE 'Tables created: llms, votes, sessions, vote_stats_aggregate, global_stats';
+  RAISE NOTICE 'Functions created: handle_vote, get_user_votes, update_vote_aggregates';
+  RAISE NOTICE 'Realtime enabled for: vote_stats_aggregate, global_stats';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Next steps:';
+  RAISE NOTICE '1. Test voting: SELECT handle_vote(''gpt-4o'', ''test-fingerprint'', 1);';
+  RAISE NOTICE '2. Check aggregates: SELECT * FROM vote_stats_aggregate;';
+  RAISE NOTICE '3. Set up cron job to run: SELECT update_vote_aggregates();';
+END $$;
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://szoxudbgfcewsnayqqub.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6b3h1ZGJnZmNld3NuYXlxcXViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYzOTEyMzEsImV4cCI6MjA3MTk2NzIzMX0.ZnC9lBcHqZvbRsToiphkPVzk3gZ9MBicpREUIJxq4Lc
+
+# Node Environment
+NODE_ENV=production
+
+# Port Configuration (for Vercel)
+PORT=3000
+
+
+{
+  "name": "llm-popularity-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^4.6.2",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.56.0",
+    "autoprefixer": "^10.4.21",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.542.0",
+    "next": "15.5.2",
+    "postcss": "^8.5.6",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "recharts": "^3.1.2",
+    "sonner": "^2.0.7",
+    "tailwindcss": "^3.4.17",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.2"
+  }
+}
