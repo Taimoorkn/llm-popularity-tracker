@@ -20,8 +20,8 @@ export default function Header() {
               <Sparkles size={32} className="text-primary" />
             </motion.div>
             <div>
-              <h1 className="text-2xl font-bold text-gradient">LLM Popularity Tracker</h1>
-              <p className="text-xs text-muted-foreground">Vote for your favorite AI models</p>
+              <h1 className="text-xl font-light text-gradient font-sora tracking-tight">LLM Popularity Tracker</h1>
+              <p className="text-xs text-muted-foreground/70 font-light font-inter">Vote for your favorite AI models</p>
             </div>
           </div>
           
@@ -29,7 +29,7 @@ export default function Header() {
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="text-sm bg-primary/10 text-primary px-4 py-2 rounded-full font-medium"
+              className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-full font-light font-inter"
             >
               2025 Edition
             </motion.div>

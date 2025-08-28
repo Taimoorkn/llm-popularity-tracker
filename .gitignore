@@ -1,6 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -10,32 +8,118 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Testing
 /coverage
+*.lcov
+.nyc_output
 
-# next.js
+# Next.js
 /.next/
 /out/
+/dist/
 
-# production
+# Production
 /build
 
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+lerna-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Environment files
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# vercel
+# Vercel
 .vercel
 
-# typescript
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS Files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+/data/
+postgres_data/
+postgres_*_data/
+redis_data/
+redis_*_data/
+pgdata/
+
+# Logs
+logs/
+*.log
+/log/
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+nginx_cache/
+postgres_scaled_data/
+redis_scaled_data/
+postgres_primary_data/
+postgres_read*_data/
+grafana_data/
+prometheus_data/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+.cache/
+tmp/
+temp/
+
+# Test files
+*.test.js
+*.spec.js
+__tests__/
+test/
+
+# Documentation (keep only essential)
+*.todo
+*.TODO
+
+# Config files (keep only templates)
+config/*.conf
+config/*.ini
+!config/*.example.*
+
+# SSL certificates
+ssl/
+*.pem
+*.crt
+*.key
+
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Package manager locks (Vercel will generate)
+# Uncomment if you want to exclude:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

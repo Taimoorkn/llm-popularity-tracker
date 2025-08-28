@@ -57,8 +57,8 @@ export default function StatsPanel() {
               <TrendingUp size={16} className="text-success" />
             )}
           </div>
-          <p className="text-xs text-muted-foreground mb-1">{stat.label}</p>
-          <p className={`${stat.small ? 'text-lg' : 'text-2xl'} font-bold text-foreground`}>
+          <p className="text-xs text-muted-foreground/70 mb-1 font-light font-inter">{stat.label}</p>
+          <p className={`${stat.small ? 'text-base' : 'text-xl'} font-normal text-foreground font-sora`}>
             {typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}
           </p>
         </motion.div>
