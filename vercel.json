@@ -1,18 +1,12 @@
 {
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev", 
+  "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
   "functions": {
-    "app/api/vote/route.js": {
+    "app/api/health/route.js": {
       "maxDuration": 10
-    },
-    "app/api/vote/sync/route.js": {
-      "maxDuration": 10
-    },
-    "app/api/stats/route.js": {
-      "maxDuration": 5
     }
   },
   "env": {
@@ -27,7 +21,7 @@
           "value": "nosniff"
         },
         {
-          "key": "X-Frame-Options", 
+          "key": "X-Frame-Options",
           "value": "DENY"
         },
         {
@@ -39,12 +33,6 @@
           "value": "strict-origin-when-cross-origin"
         }
       ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
     }
   ]
 }

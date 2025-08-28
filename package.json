@@ -10,12 +10,16 @@
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
     "db:reset": "node scripts/reset.js",
-    "db:reset-all": "node scripts/reset-all.js"
+    "db:reset-all": "node scripts/reset-all.js",
+    "use-supabase": "node scripts/use-supabase.js",
+    "use-old-system": "node scripts/use-old-system.js"
   },
   "dependencies": {
     "@fingerprintjs/fingerprintjs": "^4.6.2",
     "@fingerprintjs/fingerprintjs-pro-react": "^2.7.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.56.0",
     "autoprefixer": "^10.4.21",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
