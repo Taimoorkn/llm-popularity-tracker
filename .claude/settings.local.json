@@ -14,7 +14,8 @@
       "Bash(curl:*)",
       "Bash(del /f docker-compose.yml Dockerfile nginx.conf server.js)",
       "Bash(tree:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

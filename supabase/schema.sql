@@ -142,9 +142,8 @@ CREATE POLICY "Public can read sessions" ON sessions
 CREATE POLICY "Public can insert/update sessions" ON sessions
   FOR ALL USING (true);
 
--- Enable Realtime for tables
+-- Enable Realtime for tables (only votes table, not views)
 ALTER PUBLICATION supabase_realtime ADD TABLE votes;
-ALTER PUBLICATION supabase_realtime ADD TABLE vote_counts;
 
 -- Create indexes for performance
 CREATE INDEX idx_votes_llm_id ON votes(llm_id);
