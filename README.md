@@ -1,6 +1,6 @@
 # LLM Popularity Tracker
 
-A production-ready, scalable voting application for tracking Large Language Model (LLM) popularity. Built with Next.js 15, PostgreSQL, Redis, and enterprise-grade security features.
+A voting application for tracking Large Language Model (LLM) popularity. Built with Next.js 15, PostgreSQL, and Redis for improved performance and data persistence.
 
 ## Features
 
@@ -93,13 +93,9 @@ docker-compose down  # Stop all services
 - **Cache Hit Rate**: >90%
 - **Uptime**: 99.9% SLA
 
-## Scaling Strategy
+## Architecture Notes
 
-1. **Phase 1** (Current): Single server, file storage → 10K users
-2. **Phase 2**: Database + Redis → 50K users
-3. **Phase 3**: Load balancer + 3 instances → 150K users
-4. **Phase 4**: Read replicas + Redis cluster → 500K users
-5. **Phase 5**: Microservices + CDN → 1M+ users
+The application uses PostgreSQL for data persistence and Redis for caching and session management. The current setup is suitable for development and moderate production workloads.
 
 ## Security Features
 

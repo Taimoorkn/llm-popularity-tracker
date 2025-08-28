@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Architecture
 
 ### Overview
-This is a Next.js 15 application for tracking and voting on LLM popularity. Users can upvote/downvote various LLMs, with real-time updates and persistent storage. The app uses production-ready database storage with PostgreSQL and Redis, designed to handle 500k+ concurrent users.
+This is a Next.js 15 application for tracking and voting on LLM popularity. Users can upvote/downvote various LLMs, with real-time updates and persistent storage. The app uses database storage with PostgreSQL and Redis for improved performance and reliability.
 
 ### Tech Stack
 - **Frontend**: Next.js 15, React 19, Zustand, Tailwind CSS, Framer Motion, Recharts
@@ -131,12 +131,8 @@ The project includes a complete Docker setup:
 - Health checks for all services
 - Automatic database migration and seeding
 
-## Scaling Strategy
-1. **Phase 1**: Single server, file storage → 10K users
-2. **Phase 2**: Database + Redis → 50K users  
-3. **Phase 3**: Load balancer + 3 instances → 150K users
-4. **Phase 4**: Read replicas + Redis cluster → 500K users
-5. **Phase 5**: Microservices + CDN → 1M+ users
+## Performance Notes
+The application uses PostgreSQL and Redis for data persistence and caching. The current architecture is suitable for development and moderate production loads. For higher traffic scenarios, additional optimizations would be needed.
 
 ## Important Considerations
 
@@ -149,4 +145,4 @@ The project includes a complete Docker setup:
 - Rate limiting is enforced at both application and Nginx level
 - All LLM logos are loaded from remote CDNs (configured in next.config.mjs)
 - The app auto-creates necessary database tables on first run
-- Designed to handle 500k+ concurrent users with proper scaling
+- Uses PostgreSQL and Redis for performance and reliability
