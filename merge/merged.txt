@@ -1192,6 +1192,7 @@ export const supabase = createClient(
 )
 
 // File: c:\Users\Taimoor\Documents\GitHub\llm-popularity-tracker\lib\supabase\vote-manager.js
+// lib/supabase/vote-manager.js
 import { supabase } from './client'
 
 class SupabaseVoteManager {
@@ -1203,6 +1204,7 @@ class SupabaseVoteManager {
     this.retryDelay = 1000 // Start with 1 second
     this.isConnecting = false
     this.connectionCallbacks = null
+    this.statsInterval = null
   }
 
   // Initialize optimized realtime subscriptions with retry logic
@@ -1244,24 +1246,6 @@ class SupabaseVoteManager {
             })
           }
         })
-        // Listen to global stats updates
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'global_stats'
-        }, (payload) => {
-          console.log('🌍 Global stats update received')
-          if (onStatsUpdate && payload.new) {
-            onStatsUpdate({
-              totalVotes: payload.new.total_votes,
-              uniqueVoters: payload.new.unique_voters,
-              votesLastHour: payload.new.votes_last_hour,
-              votesToday: payload.new.votes_today,
-              topModel: payload.new.top_model,
-              topModelVotes: payload.new.top_model_votes
-            })
-          }
-        })
         .subscribe((status) => {
           console.log('✅ Realtime subscription status:', status)
           
@@ -1270,6 +1254,9 @@ class SupabaseVoteManager {
             this.retryCount = 0
             this.retryDelay = 1000
             this.isConnecting = false
+            
+            // Start polling for global stats updates (since it's now a VIEW)
+            this.startStatsPolling(onStatsUpdate)
           } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
             // Trigger retry on connection failure
             this.handleConnectionError()
@@ -1291,6 +1278,42 @@ class SupabaseVoteManager {
       this.isConnecting = false
       this.handleConnectionError()
       return false
+    }
+  }
+  
+  // Poll global stats since it's now a VIEW
+  startStatsPolling(onStatsUpdate) {
+    // Clear any existing interval
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval)
+    }
+    
+    // Fetch stats immediately
+    this.fetchAndUpdateStats(onStatsUpdate)
+    
+    // Then poll every 30 seconds
+    this.statsInterval = setInterval(() => {
+      this.fetchAndUpdateStats(onStatsUpdate)
+    }, 30000)
+  }
+  
+  // Fetch stats and trigger callback
+  async fetchAndUpdateStats(onStatsUpdate) {
+    try {
+      const stats = await this.getStats()
+      if (onStatsUpdate) {
+        console.log('📊 Polling global stats update')
+        onStatsUpdate({
+          totalVotes: stats.totalVotes || 0,
+          uniqueVoters: stats.uniqueVoters || 0,
+          votesLastHour: stats.votesLastHour || 0,
+          votesToday: stats.votesToday || 0,
+          topModel: stats.topModel,
+          topModelVotes: stats.topModelVotes || 0
+        })
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error)
     }
   }
   
@@ -1321,13 +1344,17 @@ class SupabaseVoteManager {
   // Submit or update a vote
   async vote(llmId, fingerprint, voteType, metadata = {}) {
     try {
-      // If vote is 0, remove the vote
+      // Handle vote deletion (vote_type = 0)
       if (voteType === 0) {
-        const { error } = await supabase
-          .from('votes')
-          .delete()
-          .eq('llm_id', llmId)
-          .eq('fingerprint', fingerprint)
+        // Call handle_vote with 0 to delete
+        const { data, error } = await supabase
+          .rpc('handle_vote', {
+            p_llm_id: llmId,
+            p_fingerprint: fingerprint,
+            p_vote_type: 0,
+            p_ip_address: metadata.ip || null,
+            p_user_agent: metadata.userAgent || null
+          })
 
         if (error) throw error
 
@@ -1349,13 +1376,24 @@ class SupabaseVoteManager {
           p_user_agent: metadata.userAgent || null
         })
 
-      if (error) throw error
+      if (error) {
+        // Check if it's a rate limit error
+        if (error.message && error.message.includes('Rate limit')) {
+          return {
+            success: false,
+            error: 'Too many votes. Please wait a moment before voting again.'
+          }
+        }
+        throw error
+      }
 
       return {
         success: data.success,
         previousVote: data.previous_vote,
         newVote: data.new_vote,
-        voteCount: data.vote_count
+        voteCount: data.vote_count,
+        message: data.message,
+        wait_seconds: data.wait_seconds
       }
     } catch (error) {
       console.error('Vote failed:', error)
@@ -1461,7 +1499,7 @@ class SupabaseVoteManager {
     }
   }
 
-  // Get statistics from optimized global stats table
+  // Get statistics from global_stats VIEW
   async getStats() {
     try {
       const { data, error } = await supabase
@@ -1542,6 +1580,10 @@ class SupabaseVoteManager {
     if (this.channel) {
       supabase.removeChannel(this.channel)
       this.channel = null
+    }
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval)
+      this.statsInterval = null
     }
     this.subscriptions.clear()
     this.retryCount = 0

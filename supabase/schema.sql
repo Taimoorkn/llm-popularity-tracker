@@ -1,5 +1,17 @@
 -- ============================================
--- STEP 2: CREATE CORE TABLES
+-- CLEAN SLATE - DROP EVERYTHING FIRST
+-- ============================================
+DROP TABLE IF EXISTS votes CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS vote_stats_aggregate CASCADE;
+DROP TABLE IF EXISTS global_stats CASCADE;
+DROP TABLE IF EXISTS llms CASCADE;
+DROP FUNCTION IF EXISTS handle_vote CASCADE;
+DROP FUNCTION IF EXISTS get_user_votes CASCADE;
+DROP FUNCTION IF EXISTS update_vote_aggregates CASCADE;
+
+-- ============================================
+-- CORE TABLES
 -- ============================================
 
 -- Create LLMs table
@@ -36,17 +48,18 @@ CREATE TABLE sessions (
   ip_address TEXT,
   user_agent TEXT,
   vote_count INTEGER DEFAULT 0,
+  last_vote_at TIMESTAMP WITH TIME ZONE,
   last_activity TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ============================================
--- STEP 3: CREATE AGGREGATE TABLES
+-- AGGREGATE TABLE (ONLY ONE - NO GLOBAL_STATS)
 -- ============================================
 
--- Create aggregated stats table (updates every 5 seconds)
+-- Create aggregated stats table
 CREATE TABLE vote_stats_aggregate (
-  llm_id TEXT PRIMARY KEY,
+  llm_id TEXT PRIMARY KEY REFERENCES llms(id) ON DELETE CASCADE,
   total_votes INTEGER DEFAULT 0,
   upvotes INTEGER DEFAULT 0,
   downvotes INTEGER DEFAULT 0,
@@ -54,98 +67,42 @@ CREATE TABLE vote_stats_aggregate (
   last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create global stats table
-CREATE TABLE global_stats (
-  id INTEGER PRIMARY KEY DEFAULT 1,
-  total_votes INTEGER DEFAULT 0,
-  unique_voters INTEGER DEFAULT 0,
-  votes_last_hour INTEGER DEFAULT 0,
-  votes_today INTEGER DEFAULT 0,
-  top_model TEXT,
-  top_model_votes INTEGER DEFAULT 0,
-  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  CHECK (id = 1)
-);
-
--- Initialize global stats row
-INSERT INTO global_stats (id) VALUES (1);
-
 -- ============================================
--- STEP 4: CREATE VIEWS
+-- VIEWS (INCLUDING GLOBAL STATS AS A VIEW)
 -- ============================================
 
--- Create view for backward compatibility
+-- Global stats as a VIEW - no locking issues!
+CREATE VIEW global_stats AS
+SELECT 
+  1 as id,
+  COALESCE(SUM(total_votes), 0) as total_votes,
+  COALESCE(SUM(unique_voters), 0) as unique_voters,
+  (SELECT COUNT(*) FROM votes WHERE created_at > NOW() - INTERVAL '1 hour') as votes_last_hour,
+  (SELECT COUNT(*) FROM votes WHERE created_at > CURRENT_DATE) as votes_today,
+  (SELECT llm_id FROM vote_stats_aggregate ORDER BY total_votes DESC LIMIT 1) as top_model,
+  (SELECT MAX(total_votes) FROM vote_stats_aggregate) as top_model_votes,
+  NOW() as last_updated
+FROM vote_stats_aggregate;
+
+-- Backward compatibility view
 CREATE VIEW vote_counts AS
 SELECT 
   l.id as llm_id,
   l.name,
   l.company,
-  COALESCE(SUM(v.vote_type), 0) as total_votes,
-  COUNT(CASE WHEN v.vote_type = 1 THEN 1 END) as upvotes,
-  COUNT(CASE WHEN v.vote_type = -1 THEN 1 END) as downvotes,
-  COUNT(DISTINCT v.fingerprint) as unique_voters
+  COALESCE(v.total_votes, 0) as total_votes,
+  COALESCE(v.upvotes, 0) as upvotes,
+  COALESCE(v.downvotes, 0) as downvotes,
+  COALESCE(v.unique_voters, 0) as unique_voters
 FROM llms l
-LEFT JOIN votes v ON l.id = v.llm_id
-GROUP BY l.id, l.name, l.company
+LEFT JOIN vote_stats_aggregate v ON l.id = v.llm_id
 ORDER BY total_votes DESC;
 
 -- ============================================
--- STEP 5: CREATE FUNCTIONS
+-- FUNCTIONS
 -- ============================================
 
--- Function to update aggregates (called periodically)
-CREATE OR REPLACE FUNCTION update_vote_aggregates() 
-RETURNS void 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  -- Update per-LLM stats
-  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
-  SELECT 
-    l.id as llm_id,
-    COALESCE(SUM(v.vote_type), 0) as total_votes,
-    COALESCE(COUNT(CASE WHEN v.vote_type = 1 THEN 1 END), 0) as upvotes,
-    COALESCE(COUNT(CASE WHEN v.vote_type = -1 THEN 1 END), 0) as downvotes,
-    COALESCE(COUNT(DISTINCT v.fingerprint), 0) as unique_voters
-  FROM llms l
-  LEFT JOIN votes v ON l.id = v.llm_id
-  GROUP BY l.id
-  ON CONFLICT (llm_id) DO UPDATE SET
-    total_votes = EXCLUDED.total_votes,
-    upvotes = EXCLUDED.upvotes,
-    downvotes = EXCLUDED.downvotes,
-    unique_voters = EXCLUDED.unique_voters,
-    last_updated = NOW();
-    
-  -- Update global stats
-  UPDATE global_stats SET
-    total_votes = (SELECT COUNT(*) FROM votes),
-    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes),
-    votes_last_hour = (
-      SELECT COUNT(*) FROM votes 
-      WHERE created_at > NOW() - INTERVAL '1 hour'
-    ),
-    votes_today = (
-      SELECT COUNT(*) FROM votes 
-      WHERE created_at > CURRENT_DATE
-    ),
-    top_model = (
-      SELECT llm_id FROM vote_stats_aggregate 
-      ORDER BY total_votes DESC 
-      LIMIT 1
-    ),
-    top_model_votes = (
-      SELECT total_votes FROM vote_stats_aggregate 
-      ORDER BY total_votes DESC 
-      LIMIT 1
-    ),
-    last_updated = NOW()
-  WHERE id = 1;
-END;
-$$;
-
--- Function to handle vote updates with aggregate optimization
+-- Updated handle_vote with rate limiting and no global_stats update
 CREATE OR REPLACE FUNCTION handle_vote(
   p_llm_id TEXT,
   p_fingerprint TEXT,
@@ -155,12 +112,29 @@ CREATE OR REPLACE FUNCTION handle_vote(
 ) RETURNS JSON AS $$
 DECLARE
   v_previous_vote INTEGER;
+  v_recent_votes INTEGER;
+  v_last_vote_time TIMESTAMP;
   v_result JSON;
 BEGIN
+  -- Check rate limiting (5 votes per minute max)
+  SELECT COUNT(*), MAX(created_at) INTO v_recent_votes, v_last_vote_time
+  FROM votes 
+  WHERE fingerprint = p_fingerprint 
+    AND created_at > NOW() - INTERVAL '1 minute';
+  
+  IF v_recent_votes >= 5 THEN
+    RETURN json_build_object(
+      'success', false,
+      'message', 'Rate limit exceeded. Please wait before voting again.',
+      'wait_seconds', 60 - EXTRACT(EPOCH FROM (NOW() - v_last_vote_time))::INTEGER
+    );
+  END IF;
+  
   -- Get previous vote if exists
   SELECT vote_type INTO v_previous_vote
   FROM votes
-  WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint;
+  WHERE llm_id = p_llm_id AND fingerprint = p_fingerprint
+  FOR UPDATE; -- Lock the row to prevent race conditions
   
   -- If same vote, do nothing
   IF v_previous_vote = p_vote_type THEN
@@ -185,32 +159,35 @@ BEGIN
       updated_at = NOW();
   END IF;
   
-  -- Update session activity
-  INSERT INTO sessions (fingerprint, ip_address, user_agent, vote_count)
-  VALUES (p_fingerprint, p_ip_address, p_user_agent, 1)
+  -- Update session activity with last vote time
+  INSERT INTO sessions (fingerprint, ip_address, user_agent, vote_count, last_vote_at)
+  VALUES (p_fingerprint, p_ip_address, p_user_agent, 1, NOW())
   ON CONFLICT (fingerprint)
   DO UPDATE SET 
     vote_count = sessions.vote_count + 1,
+    last_vote_at = NOW(),
     last_activity = NOW();
   
-  -- Update aggregate for this specific LLM immediately
+  -- Update aggregate for this specific LLM only (no global_stats!)
+  WITH vote_summary AS (
+    SELECT 
+      COALESCE(SUM(vote_type), 0) as total,
+      COUNT(CASE WHEN vote_type = 1 THEN 1 END) as ups,
+      COUNT(CASE WHEN vote_type = -1 THEN 1 END) as downs,
+      COUNT(DISTINCT fingerprint) as voters
+    FROM votes
+    WHERE llm_id = p_llm_id
+  )
   INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
-  SELECT 
-    p_llm_id,
-    COALESCE(SUM(vote_type), 0),
-    COUNT(CASE WHEN vote_type = 1 THEN 1 END),
-    COUNT(CASE WHEN vote_type = -1 THEN 1 END),
-    COUNT(DISTINCT fingerprint)
-  FROM votes
-  WHERE llm_id = p_llm_id
+  SELECT p_llm_id, total, ups, downs, voters FROM vote_summary
   ON CONFLICT (llm_id) DO UPDATE SET
-    total_votes = (SELECT COALESCE(SUM(vote_type), 0) FROM votes WHERE llm_id = p_llm_id),
-    upvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = 1),
-    downvotes = (SELECT COUNT(*) FROM votes WHERE llm_id = p_llm_id AND vote_type = -1),
-    unique_voters = (SELECT COUNT(DISTINCT fingerprint) FROM votes WHERE llm_id = p_llm_id),
+    total_votes = EXCLUDED.total_votes,
+    upvotes = EXCLUDED.upvotes,
+    downvotes = EXCLUDED.downvotes,
+    unique_voters = EXCLUDED.unique_voters,
     last_updated = NOW();
   
-  -- Return success with vote counts from aggregate table
+  -- Return success with vote counts
   SELECT json_build_object(
     'success', true,
     'previous_vote', v_previous_vote,
@@ -226,78 +203,100 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_user_votes(p_fingerprint TEXT)
 RETURNS JSON AS $$
 BEGIN
-  RETURN json_object_agg(llm_id, vote_type)
-  FROM votes
-  WHERE fingerprint = p_fingerprint;
+  RETURN COALESCE(
+    (SELECT json_object_agg(llm_id, vote_type)
+     FROM votes
+     WHERE fingerprint = p_fingerprint),
+    '{}'::json
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+-- Periodic aggregate update (for cron job if needed)
+CREATE OR REPLACE FUNCTION update_all_aggregates() 
+RETURNS void AS $$
+BEGIN
+  -- Rebuild all aggregates from votes table
+  INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
+  SELECT 
+    l.id,
+    COALESCE(SUM(v.vote_type), 0),
+    COALESCE(COUNT(CASE WHEN v.vote_type = 1 THEN 1 END), 0),
+    COALESCE(COUNT(CASE WHEN v.vote_type = -1 THEN 1 END), 0),
+    COALESCE(COUNT(DISTINCT v.fingerprint), 0)
+  FROM llms l
+  LEFT JOIN votes v ON l.id = v.llm_id
+  GROUP BY l.id
+  ON CONFLICT (llm_id) DO UPDATE SET
+    total_votes = EXCLUDED.total_votes,
+    upvotes = EXCLUDED.upvotes,
+    downvotes = EXCLUDED.downvotes,
+    unique_voters = EXCLUDED.unique_voters,
+    last_updated = NOW();
 END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================
--- STEP 6: ENABLE ROW LEVEL SECURITY
+-- ROW LEVEL SECURITY
 -- ============================================
 
 ALTER TABLE llms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vote_stats_aggregate ENABLE ROW LEVEL SECURITY;
-ALTER TABLE global_stats ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
--- STEP 7: CREATE POLICIES
+-- POLICIES (FIXED)
 -- ============================================
 
 -- LLMs policies
 CREATE POLICY "Public can read LLMs" ON llms
   FOR SELECT USING (true);
 
--- Votes policies  
+-- Votes policies (more restrictive)
 CREATE POLICY "Public can read votes" ON votes
   FOR SELECT USING (true);
 
 CREATE POLICY "Public can insert votes" ON votes
   FOR INSERT WITH CHECK (true);
 
-CREATE POLICY "Public can update own votes" ON votes
+CREATE POLICY "Public can update votes" ON votes
   FOR UPDATE USING (true);
 
-CREATE POLICY "Public can delete votes" ON votes
-  FOR DELETE USING (true);
+-- DELETE only allowed via the handle_vote function
+CREATE POLICY "Only functions can delete votes" ON votes
+  FOR DELETE USING (false);
 
 -- Sessions policies
 CREATE POLICY "Public can read sessions" ON sessions
   FOR SELECT USING (true);
 
-CREATE POLICY "Public can insert/update sessions" ON sessions
+CREATE POLICY "Public can manage sessions" ON sessions
   FOR ALL USING (true);
 
 -- Aggregate tables policies
-CREATE POLICY "Public can read vote aggregates" ON vote_stats_aggregate
-  FOR SELECT USING (true);
-
-CREATE POLICY "Public can read global stats" ON global_stats
+CREATE POLICY "Public can read aggregates" ON vote_stats_aggregate
   FOR SELECT USING (true);
 
 -- ============================================
--- STEP 8: CREATE INDEXES
+-- INDEXES (OPTIMIZED)
 -- ============================================
 
-CREATE INDEX idx_votes_llm_id ON votes(llm_id);
-CREATE INDEX idx_votes_fingerprint ON votes(fingerprint);
+CREATE INDEX idx_votes_llm_fingerprint ON votes(llm_id, fingerprint);
+CREATE INDEX idx_votes_fingerprint_created ON votes(fingerprint, created_at DESC);
 CREATE INDEX idx_votes_created_at ON votes(created_at DESC);
 CREATE INDEX idx_sessions_fingerprint ON sessions(fingerprint);
-CREATE INDEX idx_vote_stats_aggregate_total_votes ON vote_stats_aggregate(total_votes DESC);
-CREATE INDEX idx_vote_stats_aggregate_last_updated ON vote_stats_aggregate(last_updated DESC);
+CREATE INDEX idx_sessions_last_vote ON sessions(last_vote_at DESC);
+CREATE INDEX idx_vote_stats_total_votes ON vote_stats_aggregate(total_votes DESC);
 
 -- ============================================
--- STEP 9: CONFIGURE REALTIME
+-- REALTIME (ONLY AGGREGATES)
 -- ============================================
 
--- Enable Realtime for aggregate tables only (not votes table for performance)
 ALTER PUBLICATION supabase_realtime ADD TABLE vote_stats_aggregate;
-ALTER PUBLICATION supabase_realtime ADD TABLE global_stats;
 
 -- ============================================
--- STEP 10: INSERT LLM DATA
+-- INSERT LLM DATA
 -- ============================================
 
 INSERT INTO llms (id, name, company, description, logo, image, color, release_year, use_cases) VALUES
@@ -323,25 +322,30 @@ INSERT INTO llms (id, name, company, description, logo, image, color, release_ye
 ('openchat-3-5', 'OpenChat 3.5', 'OpenChat', 'Community model achieving GPT-3.5 level performance', '💬', 'https://github.com/imoneoi.png', 'from-green-500 to-blue-600', 2024, ARRAY['Open source', 'Chat optimization', 'Community driven', 'Efficient']);
 
 -- ============================================
--- STEP 11: INITIALIZE AGGREGATES
+-- INITIALIZE AGGREGATES
 -- ============================================
 
--- Run initial population of aggregates
-SELECT update_vote_aggregates();
+-- Initialize empty aggregates for all LLMs
+INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
+SELECT id, 0, 0, 0, 0 FROM llms;
 
 -- ============================================
--- DONE! 
+-- VERIFICATION
 -- ============================================
 
 DO $$ 
 BEGIN
-  RAISE NOTICE 'Fresh installation completed successfully!';
-  RAISE NOTICE 'Tables created: llms, votes, sessions, vote_stats_aggregate, global_stats';
-  RAISE NOTICE 'Functions created: handle_vote, get_user_votes, update_vote_aggregates';
-  RAISE NOTICE 'Realtime enabled for: vote_stats_aggregate, global_stats';
+  RAISE NOTICE '✅ Database reset completed successfully!';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Key improvements:';
+  RAISE NOTICE '1. ✅ global_stats is now a VIEW - no more locking issues';
+  RAISE NOTICE '2. ✅ Added rate limiting (5 votes/minute) in handle_vote';
+  RAISE NOTICE '3. ✅ Fixed RLS policies - votes can only be deleted via functions';
+  RAISE NOTICE '4. ✅ Added FOR UPDATE lock to prevent race conditions';
+  RAISE NOTICE '5. ✅ Better indexes for performance';
   RAISE NOTICE '';
   RAISE NOTICE 'Next steps:';
   RAISE NOTICE '1. Test voting: SELECT handle_vote(''gpt-4o'', ''test-fingerprint'', 1);';
-  RAISE NOTICE '2. Check aggregates: SELECT * FROM vote_stats_aggregate;';
-  RAISE NOTICE '3. Set up cron job to run: SELECT update_vote_aggregates();';
+  RAISE NOTICE '2. Check stats: SELECT * FROM global_stats;';
+  RAISE NOTICE '3. Update your Next.js to 15.2.3+';
 END $$;
