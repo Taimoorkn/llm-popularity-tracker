@@ -12,6 +12,7 @@ const useVoteStore = create((set, get) => ({
     totalVotes: 0,
     uniqueVoters: 0,
     votesLastHour: 0,
+    votesToday: 0,
     topModel: null,
     topModelVotes: 0,
   },
@@ -269,6 +270,7 @@ const useVoteStore = create((set, get) => ({
         totalVotes: 0,
         uniqueVoters: 0,
         votesLastHour: 0,
+        votesToday: 0,
         topModel: null,
         topModelVotes: 0,
       }
