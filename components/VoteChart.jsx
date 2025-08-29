@@ -13,7 +13,7 @@ import {
   Cell,
 } from 'recharts';
 import useVoteStore from '@/store/useVoteStore';
-import { BarChart3, PieChart } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 
 export default function VoteChart() {
   const [chartType, setChartType] = useState('bar');
@@ -59,7 +59,7 @@ export default function VoteChart() {
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload[0]) {
       return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+        <div className="bg-card border border-border rounded-lg shadow-lg">
           <p className="font-bold text-foreground">{payload[0].payload.name}</p>
           <p className="text-sm text-muted-foreground">
             Votes: <span className="text-primary font-bold">{payload[0].value}</span>
@@ -84,17 +84,16 @@ export default function VoteChart() {
         <div className="flex gap-2">
           <button
             onClick={() => setChartType('bar')}
-            className={`p-2 rounded-lg transition-all ${
-              chartType === 'bar' ? 'bg-primary text-white' : 'bg-card-hover text-muted-foreground'
-            }`}
+            className={`p-2 rounded-lg transition-all ${chartType === 'bar' ? 'bg-primary text-white' : 'bg-card-hover text-muted-foreground'
+              }`}
           >
             <BarChart3 size={16} />
           </button>
         </div>
       </div>
       
-      <ResponsiveContainer width="100%" height={500}>
-        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
+      <ResponsiveContainer width="100%" height={400}>
+        <BarChart data={chartData} margin={{ right: 30 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis
             dataKey="name"

@@ -33,7 +33,7 @@ export default function Header() {
             >
               2025 Edition
             </motion.div>
-            <motion.a
+            {/* <motion.a
               href="https://github.com"
               target="_blank"
               rel="noopener noreferrer"
@@ -42,7 +42,7 @@ export default function Header() {
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               <Github size={20} />
-            </motion.a>
+            </motion.a> */}
           </div>
         </div>
       </div>

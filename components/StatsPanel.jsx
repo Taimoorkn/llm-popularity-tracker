@@ -47,18 +47,20 @@ export default function StatsPanel() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: index * 0.1 }}
-          className="bg-card border border-border rounded-lg p-4"
+          className="flex justify-between bg-card border border-border rounded-lg p-4"
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-              <stat.icon size={20} className={stat.color} />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+                <stat.icon size={20} className={stat.color} />
+              </div>
+              {stat.label === 'Last Hour' && stats.votesLastHour > 0 && (
+                <TrendingUp size={16} className="text-success" />
+              )}
             </div>
-            {stat.label === 'Last Hour' && stats.votesLastHour > 0 && (
-              <TrendingUp size={16} className="text-success" />
-            )}
+            <p className="text-xs text-muted-foreground/70 font-light font-inter">{stat.label}</p>
           </div>
-          <p className="text-xs text-muted-foreground/70 mb-1 font-light font-inter">{stat.label}</p>
-          <p className={`${stat.small ? 'text-base' : 'text-xl'} font-normal text-foreground font-sora`}>
+          <p className="text-3xl font-extralight text-foreground font-sora">
             {typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}
           </p>
         </motion.div>
