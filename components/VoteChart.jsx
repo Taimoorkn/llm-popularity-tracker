@@ -165,9 +165,9 @@ export default function VoteChart() {
           data={chartData} 
           margin={{ 
             top: 20, 
-            right: isMobile ? 10 : 30, 
-            left: isMobile ? 10 : 20, 
-            bottom: isMobile ? 60 : 80 
+            right: isMobile ? 0 : 30, 
+            left: isMobile ? 0 : 20, 
+            bottom: isMobile ? 0 : 80 
           }}
           style={{ backgroundColor: 'transparent' }}
         >

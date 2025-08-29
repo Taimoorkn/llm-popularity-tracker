@@ -40,27 +40,27 @@ export default function StatsPanel() {
   ];
   
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6 md:mb-8">
       {statCards.map((stat, index) => (
         <motion.div
           key={stat.label}
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: index * 0.1 }}
-          className="flex justify-between bg-card border border-border rounded-lg p-4"
+          className="flex justify-between bg-card border border-border rounded-lg p-3 sm:p-0"
         >
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                <stat.icon size={20} className={stat.color} />
+            <div className="flex items-center justify-between mb-1.5 sm:mb-0">
+              <div className={`p-1.5 sm:p-2 rounded-lg ${stat.bgColor}`}>
+                <stat.icon size={16} className={`sm:w-5 sm:h-5 ${stat.color}`} />
               </div>
               {stat.label === 'Last Hour' && stats.votesLastHour > 0 && (
-                <TrendingUp size={16} className="text-success" />
+                <TrendingUp size={14} className="sm:w-4 sm:h-4 text-success" />
               )}
             </div>
-            <p className="text-xs text-muted-foreground/70 font-light font-inter">{stat.label}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground/70 font-light font-inter leading-tight">{stat.label}</p>
           </div>
-          <p className="text-3xl font-extralight text-foreground font-sora">
+          <p className="text-xl sm:text-2xl md:text-3xl font-extralight text-foreground font-sora leading-none">
             {typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}
           </p>
         </motion.div>

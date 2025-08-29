@@ -8,12 +8,35 @@
     --foreground: #ededed;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Touch optimizations for mobile */
+  button, [role="button"], input, select {
+    touch-action: manipulation;
+  }
+
+  /* Prevent zoom on input focus on iOS Safari */
+  @media screen and (max-width: 767px) {
+    input[type="text"], 
+    input[type="search"], 
+    select {
+      font-size: 16px;
+    }
   }
   
   /* Typography System */
