@@ -177,7 +177,7 @@ export default function VoteChart({ sortBy = 'votes' }) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card border border-border rounded-lg p-4 md:p-6"
+      className="bg-card/80 border border-border/30 hover:border-border/50 rounded-xl p-4 md:p-6 shadow-sm hover:shadow-md transition-all duration-300"
     >
       <div className="flex items-center justify-between mb-4 md:mb-6">
         <h2 className="text-lg md:text-xl font-bold text-foreground flex items-center gap-2">
