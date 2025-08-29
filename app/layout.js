@@ -1,4 +1,6 @@
 import { Inter, Sora, JetBrains_Mono } from "next/font/google";
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import "./globals.css";
 
 const inter = Inter({
@@ -86,6 +88,8 @@ export default function RootLayout({ children }) {
         className={`${inter.variable} ${sora.variable} ${jetbrainsMono.variable} antialiased bg-background text-foreground font-inter`}
       >
         {children}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
