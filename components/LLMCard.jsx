@@ -78,16 +78,12 @@ export default function LLMCard({ llm, index }) {
       {/* Header with Logo and Info - more compact */}
       <div className="flex items-start gap-2.5 mb-3">
         <div className="flex-shrink-0 w-9 h-9 rounded-md overflow-hidden bg-white/5 backdrop-blur-sm border border-white/10 flex items-center justify-center">
-          {llm.image && !imageError ? (
-            <img 
-              src={llm.image} 
-              alt={`${llm.company} logo`}
-              className="w-7 h-7 object-contain"
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <span className="text-sm">{llm.logo}</span>
-          )}
+          <img 
+            src={llm.logo} 
+            alt={`${llm.company} logo`}
+            className="w-7 h-7 object-contain"
+            onError={() => setImageError(true)}
+          />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-foreground truncate font-sora leading-tight">{llm.name}</h3>
