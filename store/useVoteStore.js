@@ -5,7 +5,8 @@ import voteManager from '@/lib/supabase/vote-manager';
 
 const useVoteStore = create((set, get) => ({
   llms: llmData,
-  votes: {},
+  votes: {}, // Keep for backward compatibility
+  voteStats: {}, // Enhanced: { llm_id: { total, upvotes, downvotes, uniqueVoters } }
   userVotes: {},
   rankings: [],
   stats: {
@@ -15,6 +16,8 @@ const useVoteStore = create((set, get) => ({
     votesToday: 0,
     topModel: null,
     topModelVotes: 0,
+    totalUpvotes: 0,
+    totalDownvotes: 0,
   },
   loading: false,
   error: null,
@@ -39,8 +42,15 @@ const useVoteStore = create((set, get) => ({
       const syncResult = await voteManager.syncUserData(fingerprint);
       
       if (syncResult.success) {
+        // Create backward compatible votes object
+        const votes = {};
+        Object.keys(syncResult.voteStats || {}).forEach(llmId => {
+          votes[llmId] = syncResult.voteStats[llmId].total;
+        });
+
         set({
-          votes: syncResult.votes || {},
+          votes: votes, // Backward compatibility
+          voteStats: syncResult.voteStats || {},
           userVotes: syncResult.userVotes || {},
           rankings: syncResult.rankings || [],
           stats: syncResult.stats || get().stats,
@@ -54,10 +64,21 @@ const useVoteStore = create((set, get) => ({
           (voteUpdate) => {
             console.log('📡 Real-time aggregate update for:', voteUpdate.llmId);
             const currentVotes = get().votes;
+            const currentVoteStats = get().voteStats;
+            
             set({ 
               votes: {
                 ...currentVotes,
-                [voteUpdate.llmId]: voteUpdate.votes
+                [voteUpdate.llmId]: voteUpdate.total
+              },
+              voteStats: {
+                ...currentVoteStats,
+                [voteUpdate.llmId]: {
+                  total: voteUpdate.total,
+                  upvotes: voteUpdate.upvotes,
+                  downvotes: voteUpdate.downvotes,
+                  uniqueVoters: voteUpdate.uniqueVoters
+                }
               },
               lastUpdate: new Date()
             });
@@ -93,10 +114,12 @@ const useVoteStore = create((set, get) => ({
       
       // Initialize with zero votes as fallback
       const initialVotes = {};
+      const initialVoteStats = {};
       llmData.forEach(llm => {
         initialVotes[llm.id] = 0;
+        initialVoteStats[llm.id] = { total: 0, upvotes: 0, downvotes: 0, uniqueVoters: 0 };
       });
-      set({ votes: initialVotes });
+      set({ votes: initialVotes, voteStats: initialVoteStats });
     }
   },
   
@@ -278,6 +301,26 @@ const useVoteStore = create((set, get) => ({
   // Get total votes for an LLM
   getVoteCount: (llmId) => {
     return get().votes[llmId] || 0;
+  },
+  
+  // Get upvotes for an LLM
+  getUpvotes: (llmId) => {
+    return get().voteStats[llmId]?.upvotes || 0;
+  },
+  
+  // Get downvotes for an LLM
+  getDownvotes: (llmId) => {
+    return get().voteStats[llmId]?.downvotes || 0;
+  },
+  
+  // Get unique voters for an LLM
+  getUniqueVoters: (llmId) => {
+    return get().voteStats[llmId]?.uniqueVoters || 0;
+  },
+  
+  // Get detailed stats for an LLM
+  getDetailedStats: (llmId) => {
+    return get().voteStats[llmId] || { total: 0, upvotes: 0, downvotes: 0, uniqueVoters: 0 };
   },
   
   // Check if LLM is trending (top 3)

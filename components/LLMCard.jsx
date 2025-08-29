@@ -2,16 +2,19 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, X } from 'lucide-react';
+import { ChevronUp, ChevronDown, X, Users, TrendingUp } from 'lucide-react';
 import useVoteStore from '@/store/useVoteStore';
 import { toast } from 'sonner';
 
 export default function LLMCard({ llm, index }) {
   const [imageError, setImageError] = useState(false);
-  const { vote, getUserVote, getVoteCount, isTrending, getRank } = useVoteStore();
+  const { vote, getUserVote, getVoteCount, getUpvotes, getDownvotes, getUniqueVoters, isTrending, getRank } = useVoteStore();
   
   const userVote = getUserVote(llm.id);
   const voteCount = getVoteCount(llm.id);
+  const upvotes = getUpvotes(llm.id);
+  const downvotes = getDownvotes(llm.id);
+  const uniqueVoters = getUniqueVoters(llm.id);
   const trending = isTrending(llm.id);
   const rank = getRank(llm.id);
   
@@ -98,15 +101,31 @@ export default function LLMCard({ llm, index }) {
           <ChevronUp size={14} className="sm:w-4 sm:h-4" strokeWidth={2} />
         </motion.button>
         
-        <div className="flex items-center gap-1 sm:gap-1.5">
-          {/* Vote count - Mobile Optimized */}
-          <div className="flex flex-col items-center px-1 sm:px-2">
-            <span className={`text-xs sm:text-sm font-medium font-mono ${
+        <div className="flex flex-col items-center gap-1">
+          {/* Detailed vote stats - Mobile Optimized */}
+          <div className="flex items-center gap-1 sm:gap-2 text-[9px] sm:text-xs">
+            <div className="flex items-center gap-0.5 text-green-400">
+              <ChevronUp size={10} className="sm:w-3 sm:h-3" strokeWidth={2} />
+              <span className="font-mono">{upvotes}</span>
+            </div>
+            <div className="w-px h-2 sm:h-3 bg-muted-foreground/20"></div>
+            <div className="flex items-center gap-0.5 text-red-400">
+              <ChevronDown size={10} className="sm:w-3 sm:h-3" strokeWidth={2} />
+              <span className="font-mono">{downvotes}</span>
+            </div>
+          </div>
+          
+          {/* Net vote count - Mobile Optimized */}
+          <div className="flex flex-col items-center">
+            <span className={`text-sm sm:text-lg font-medium font-mono ${
               voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-500'
             }`}>
               {voteCount > 0 ? '+' : ''}{voteCount}
             </span>
-            <span className="text-[8px] sm:text-[9px] text-muted-foreground/50 font-inter font-light">votes</span>
+            <div className="flex items-center gap-1 text-[8px] sm:text-[9px] text-muted-foreground/60">
+              <Users size={8} className="sm:w-2.5 sm:h-2.5" />
+              <span className="font-inter font-light">{uniqueVoters}</span>
+            </div>
           </div>
           
           {/* Clear vote button - Mobile Optimized */}

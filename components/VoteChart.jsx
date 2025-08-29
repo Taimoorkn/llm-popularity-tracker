@@ -11,14 +11,15 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  Legend,
 } from 'recharts';
 import useVoteStore from '@/store/useVoteStore';
-import { BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 
 export default function VoteChart({ sortBy = 'votes' }) {
   const [isMobile, setIsMobile] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const { votes, llms, getVoteCount } = useVoteStore();
+  const { votes, llms, voteStats, getVoteCount, getUpvotes, getDownvotes, getUniqueVoters } = useVoteStore();
   
   // Check if mobile
   useEffect(() => {
@@ -31,12 +32,19 @@ export default function VoteChart({ sortBy = 'votes' }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  // Prepare chart data - show ALL LLMs with their vote counts
+  // Prepare chart data - show ALL LLMs with detailed vote stats
   const allChartData = llms.map((llm) => {
     const voteCount = votes[llm.id] || 0;
+    const upvotes = getUpvotes(llm.id);
+    const downvotes = getDownvotes(llm.id);
+    const uniqueVoters = getUniqueVoters(llm.id);
+    
     return {
       name: llm.name,
-      votes: voteCount,
+      total: voteCount,
+      upvotes: upvotes,
+      downvotes: downvotes,
+      uniqueVoters: uniqueVoters,
       color: llm.color || 'from-gray-500 to-gray-600',
       id: llm.id,
       company: llm.company,
@@ -44,7 +52,7 @@ export default function VoteChart({ sortBy = 'votes' }) {
   }).sort((a, b) => {
     // Use the same sorting logic as the main page
     if (sortBy === 'votes') {
-      return b.votes - a.votes; // Sort by votes descending
+      return b.total - a.total; // Sort by total votes descending
     } else if (sortBy === 'name') {
       return a.name.localeCompare(b.name); // Sort by name ascending
     } else if (sortBy === 'company') {
@@ -87,18 +95,37 @@ export default function VoteChart({ sortBy = 'votes' }) {
     return '#6b7280';
   };
   
-  const CustomTooltip = ({ active, payload }) => {
+  const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload[0]) {
+      const data = payload[0].payload;
       return (
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-xl p-3 pointer-events-none"
+          className="bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-xl p-4 pointer-events-none max-w-xs"
         >
-          <p className="font-semibold text-foreground text-sm">{payload[0].payload.name}</p>
-          <p className="text-sm text-muted-foreground">
-            Votes: <span className="text-primary font-bold">{payload[0].value}</span>
-          </p>
+          <p className="font-semibold text-foreground text-sm mb-3">{data.name}</p>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="flex items-center gap-2 text-green-400">
+              <div className="w-3 h-3 bg-green-400 rounded"></div>
+              <span>Upvotes: <span className="font-bold">{data.upvotes}</span></span>
+            </div>
+            <div className="flex items-center gap-2 text-red-400">
+              <div className="w-3 h-3 bg-red-400 rounded"></div>
+              <span>Downvotes: <span className="font-bold">{data.downvotes}</span></span>
+            </div>
+            <div className="flex items-center gap-2 text-blue-400 col-span-2">
+              <Users size={12} />
+              <span>Unique Voters: <span className="font-bold">{data.uniqueVoters}</span></span>
+            </div>
+          </div>
+          <div className="border-t border-border/30 mt-3 pt-2">
+            <p className="text-sm font-medium text-primary">
+              Net Score: <span className={data.total >= 0 ? 'text-green-400' : 'text-red-400'}>
+                {data.total > 0 ? '+' : ''}{data.total}
+              </span>
+            </p>
+          </div>
         </motion.div>
       );
     }
@@ -216,10 +243,31 @@ export default function VoteChart({ sortBy = 'votes' }) {
               outline: 'none'
             }}
           />
+          <Legend 
+            wrapperStyle={{ 
+              fontSize: isMobile ? '10px' : '12px',
+              paddingTop: '10px'
+            }}
+          />
           <Bar 
-            dataKey="votes" 
+            dataKey="upvotes" 
+            name="Upvotes"
+            fill="#10b981"
+            radius={[2, 2, 0, 0]}
+            maxBarSize={isMobile ? 15 : 20}
+          />
+          <Bar 
+            dataKey="downvotes" 
+            name="Downvotes"
+            fill="#ef4444"
+            radius={[2, 2, 0, 0]}
+            maxBarSize={isMobile ? 15 : 20}
+          />
+          <Bar 
+            dataKey="total" 
+            name="Net Score"
             radius={[4, 4, 0, 0]}
-            maxBarSize={isMobile ? 40 : 60}
+            maxBarSize={isMobile ? 25 : 35}
           >
             {chartData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={getBarColor(entry.color)} />
