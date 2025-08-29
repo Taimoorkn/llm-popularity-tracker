@@ -18,12 +18,7 @@ CREATE TABLE llms (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   company TEXT NOT NULL,
-  description TEXT,
-  logo TEXT,
-  image TEXT,
-  color TEXT,
   release_year INTEGER,
-  use_cases TEXT[],
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -289,27 +284,27 @@ ALTER PUBLICATION supabase_realtime ADD TABLE vote_stats_aggregate;
 -- INSERT LLM DATA
 -- ============================================
 
-INSERT INTO llms (id, name, company, description, logo, image, color, release_year, use_cases) VALUES
-('gpt-4o', 'GPT-4o', 'OpenAI', 'Most advanced multimodal AI with vision, analysis, and coding capabilities', '🤖', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/200px-OpenAI_Logo.svg.png', 'from-green-500 to-emerald-600', 2024, ARRAY['General purpose', 'Code generation', 'Creative writing', 'Vision tasks']),
-('claude-3-5-sonnet', 'Claude 3.5 Sonnet', 'Anthropic', 'Balanced model excelling at analysis, coding, and nuanced conversation', '🧠', 'https://www.anthropic.com/_next/static/media/claude-logo.2f5f0b53.svg', 'from-orange-500 to-amber-600', 2024, ARRAY['Code analysis', 'Research', 'Writing', 'Complex reasoning']),
-('gemini-ultra', 'Gemini Ultra', 'Google', 'Google''s flagship model with strong multimodal and reasoning abilities', '💎', 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg', 'from-blue-500 to-cyan-600', 2024, ARRAY['Multimodal tasks', 'Scientific research', 'Code', 'Mathematics']),
-('llama-3-70b', 'Llama 3 70B', 'Meta', 'Open-source powerhouse for customizable AI applications', '🦙', 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Meta_Platforms_Inc._logo.svg/200px-Meta_Platforms_Inc._logo.svg.png', 'from-purple-500 to-violet-600', 2024, ARRAY['Open source projects', 'Fine-tuning', 'Research', 'Commercial use']),
-('mistral-large', 'Mistral Large', 'Mistral AI', 'European AI champion with strong multilingual capabilities', '🌪️', 'https://docs.mistral.ai/img/logo.svg', 'from-red-500 to-pink-600', 2024, ARRAY['Multilingual tasks', 'European languages', 'Code', 'Efficiency']),
-('command-r-plus', 'Command R+', 'Cohere', 'Enterprise-focused with excellent retrieval and grounding', '📊', 'https://cohere.com/favicon.svg', 'from-indigo-500 to-blue-600', 2024, ARRAY['Enterprise search', 'RAG systems', 'Document analysis', 'Business']),
-('grok', 'Grok', 'xAI', 'Real-time knowledge with humor and unconventional responses', '🚀', 'https://grok.x.ai/assets/grok-logo-light.svg', 'from-gray-600 to-slate-700', 2023, ARRAY['Real-time info', 'Social media', 'Humor', 'Current events']),
-('perplexity', 'Perplexity', 'Perplexity AI', 'Search-enhanced AI with real-time web access and citations', '🔍', 'https://www.perplexity.ai/favicon.svg', 'from-teal-500 to-cyan-600', 2024, ARRAY['Web search', 'Research', 'Fact-checking', 'Citations']),
-('qwen-2-5', 'Qwen 2.5', 'Alibaba', 'Strong Asian language support with competitive performance', '🐉', 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Alibaba-Logo.svg/200px-Alibaba-Logo.svg.png', 'from-yellow-500 to-orange-600', 2024, ARRAY['Chinese language', 'Asian markets', 'E-commerce', 'Translation']),
-('deepseek-coder', 'DeepSeek Coder', 'DeepSeek', 'Specialized coding model with excellent debugging capabilities', '💻', 'https://github.com/deepseek-ai.png', 'from-green-600 to-teal-700', 2024, ARRAY['Code generation', 'Debugging', 'Code review', 'Documentation']),
-('phi-3', 'Phi-3', 'Microsoft', 'Small but mighty model optimized for edge deployment', '⚡', 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Microsoft_logo.svg/200px-Microsoft_logo.svg.png', 'from-blue-600 to-indigo-700', 2024, ARRAY['Edge computing', 'Mobile apps', 'Low resource', 'Fast inference']),
-('falcon-180b', 'Falcon 180B', 'TII UAE', 'Open-source giant with strong performance across tasks', '🦅', 'https://www.tii.ae/sites/default/files/2022-12/TII-logo-WHITE.png', 'from-amber-600 to-yellow-700', 2023, ARRAY['Open source', 'Research', 'Arabic language', 'General purpose']),
-('vicuna-33b', 'Vicuna-33B', 'LMSYS', 'Fine-tuned Llama model with improved conversational abilities', '🦌', 'https://github.com/lm-sys.png', 'from-pink-500 to-rose-600', 2023, ARRAY['Chatbots', 'Open source', 'Fine-tuning base', 'Research']),
-('solar-10-7b', 'SOLAR-10.7B', 'Upstage AI', 'Efficient Korean model with strong multilingual capabilities', '☀️', 'https://github.com/UpstageAI.png', 'from-orange-600 to-red-700', 2024, ARRAY['Korean language', 'Efficient inference', 'Asian languages', 'Small models']),
-('yi-34b', 'Yi-34B', '01.AI', 'Bilingual model excelling in Chinese and English tasks', '🎭', 'https://github.com/01-ai.png', 'from-purple-600 to-pink-700', 2024, ARRAY['Chinese-English', 'Translation', 'Bilingual tasks', 'Open source']),
-('mixtral-8x7b', 'Mixtral 8x7B', 'Mistral AI', 'Mixture of experts model with excellent efficiency', '🎨', 'https://docs.mistral.ai/img/logo.svg', 'from-violet-600 to-purple-700', 2024, ARRAY['Efficient inference', 'MoE architecture', 'Code', 'Multiple languages']),
-('bard', 'Bard (Gemini Pro)', 'Google', 'Google''s conversational AI with web access and multimodal features', '🎭', 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg', 'from-blue-500 to-green-600', 2024, ARRAY['Web browsing', 'Conversation', 'Creative tasks', 'Integration']),
-('ernie-4', 'ERNIE 4.0', 'Baidu', 'Chinese AI leader with strong understanding of Chinese culture', '🏮', 'https://upload.wikimedia.org/wikipedia/en/thumb/3/37/Baidu_Logo.svg/200px-Baidu_Logo.svg.png', 'from-red-600 to-orange-700', 2024, ARRAY['Chinese market', 'Cultural context', 'Search', 'Business']),
-('stablelm-2', 'StableLM 2', 'Stability AI', 'Open model from the makers of Stable Diffusion', '🎯', 'https://github.com/Stability-AI.png', 'from-purple-500 to-indigo-600', 2024, ARRAY['Open source', 'Customization', 'Research', 'Creative apps']),
-('inflection-2-5', 'Inflection-2.5', 'Inflection AI', 'Personal AI with empathetic and supportive conversation style', '💬', 'https://github.com/InflectionAI.png', 'from-teal-600 to-blue-700', 2024, ARRAY['Personal assistant', 'Emotional support', 'Coaching', 'Companionship']);
+INSERT INTO llms (id, name, company, release_year) VALUES
+('gpt-4o', 'GPT-4o', 'OpenAI', 2024),
+('claude-3-5-sonnet', 'Claude 3.5 Sonnet', 'Anthropic', 2024),
+('gemini-ultra', 'Gemini Ultra', 'Google', 2024),
+('llama-3-70b', 'Llama 3 70B', 'Meta', 2024),
+('mistral-large', 'Mistral Large', 'Mistral AI', 2024),
+('command-r-plus', 'Command R+', 'Cohere', 2024),
+('grok', 'Grok', 'xAI', 2023),
+('perplexity', 'Perplexity', 'Perplexity AI', 2024),
+('qwen-2-5', 'Qwen 2.5', 'Alibaba', 2024),
+('deepseek-coder', 'DeepSeek Coder', 'DeepSeek', 2024),
+('phi-3', 'Phi-3', 'Microsoft', 2024),
+('falcon-180b', 'Falcon 180B', 'TII UAE', 2023),
+('vicuna-33b', 'Vicuna-33B', 'LMSYS', 2023),
+('solar-10-7b', 'SOLAR-10.7B', 'Upstage AI', 2024),
+('yi-34b', 'Yi-34B', '01.AI', 2024),
+('mixtral-8x7b', 'Mixtral 8x7B', 'Mistral AI', 2024),
+('bard', 'Bard (Gemini Pro)', 'Google', 2024),
+('ernie-4', 'ERNIE 4.0', 'Baidu', 2024),
+('stablelm-2', 'StableLM 2', 'Stability AI', 2024),
+('inflection-2-5', 'Inflection-2.5', 'Inflection AI', 2024);
 
 -- Initialize aggregates
 INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
