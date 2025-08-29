@@ -120,7 +120,7 @@ const useVoteStore = create((set, get) => ({
       set({ error: `Please wait ${waitTime} second${waitTime > 1 ? 's' : ''} between votes` });
       setTimeout(() => set({ error: null }), 2000);
       console.log(`Rate limited: ${timeSinceLastVote}ms since last vote, need ${throttleMs}ms`);
-      return;
+      return { success: false, rateLimited: true };
     }
     
     const currentUserVote = get().userVotes[llmId] || 0;
@@ -128,7 +128,7 @@ const useVoteStore = create((set, get) => ({
     // Don't vote if it's the same
     if (currentUserVote === voteType) {
       console.log('Same vote, ignoring');
-      return;
+      return { success: false, sameVote: true };
     }
     
     // Update last vote time
