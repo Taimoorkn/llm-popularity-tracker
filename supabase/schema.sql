@@ -70,7 +70,7 @@ CREATE TABLE vote_stats_aggregate (
 CREATE VIEW global_stats AS
 SELECT 
   1 as id,
-  COALESCE(SUM(total_votes), 0) as total_votes,
+  (SELECT COUNT(*) FROM votes) as total_votes,
   COALESCE(SUM(unique_voters), 0) as unique_voters,
   (SELECT COUNT(*) FROM votes WHERE created_at > NOW() - INTERVAL '1 hour') as votes_last_hour,
   (SELECT COUNT(*) FROM votes WHERE created_at > CURRENT_DATE) as votes_today,
