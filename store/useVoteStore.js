@@ -167,27 +167,28 @@ const useVoteStore = create((set, get) => ({
       );
       
       if (!result.success) {
-        // Revert optimistic update on failure
-        console.error('Vote failed:', result.error);
-        
-        const revertedVotes = { ...get().votes };
-        revertedVotes[llmId] = (revertedVotes[llmId] || 0) - voteChange;
-        
-        const revertedUserVotes = { ...get().userVotes };
-        if (currentUserVote === 0) {
-          delete revertedUserVotes[llmId];
-        } else {
-          revertedUserVotes[llmId] = currentUserVote;
-        }
-        
-        set({ 
-          votes: revertedVotes,
-          userVotes: revertedUserVotes,
-          error: result.error || 'Failed to submit vote'
-        });
-        
-        // Show countdown for database rate limits
+        // Handle database rate limiting (not an error, just feedback)
         if (result.wait_seconds) {
+          console.log('📊 Database rate limit triggered, showing countdown');
+          
+          // Revert optimistic update for rate limit
+          const revertedVotes = { ...get().votes };
+          revertedVotes[llmId] = (revertedVotes[llmId] || 0) - voteChange;
+          
+          const revertedUserVotes = { ...get().userVotes };
+          if (currentUserVote === 0) {
+            delete revertedUserVotes[llmId];
+          } else {
+            revertedUserVotes[llmId] = currentUserVote;
+          }
+          
+          set({ 
+            votes: revertedVotes,
+            userVotes: revertedUserVotes,
+            error: result.error
+          });
+          
+          // Show countdown for database rate limits
           let remainingSeconds = Math.ceil(result.wait_seconds);
           const countdownTimer = setInterval(() => {
             remainingSeconds--;
@@ -198,8 +199,30 @@ const useVoteStore = create((set, get) => ({
               clearInterval(countdownTimer);
             }
           }, 1000);
+          
+          return { success: false, rateLimited: true, wait_seconds: result.wait_seconds };
         } else {
+          // Actual error (not rate limit)
+          console.error('Vote failed:', result.error);
+          
+          const revertedVotes = { ...get().votes };
+          revertedVotes[llmId] = (revertedVotes[llmId] || 0) - voteChange;
+          
+          const revertedUserVotes = { ...get().userVotes };
+          if (currentUserVote === 0) {
+            delete revertedUserVotes[llmId];
+          } else {
+            revertedUserVotes[llmId] = currentUserVote;
+          }
+          
+          set({ 
+            votes: revertedVotes,
+            userVotes: revertedUserVotes,
+            error: result.error || 'Failed to submit vote'
+          });
+          
           setTimeout(() => set({ error: null }), 3000);
+          return { success: false, error: result.error };
         }
       } else {
         console.log('✅ Vote successful');
