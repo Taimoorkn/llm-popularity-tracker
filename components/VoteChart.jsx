@@ -148,7 +148,31 @@ export default function VoteChart({ sortBy = 'votes' }) {
   const prevPage = () => {
     setCurrentPage((prev) => (prev - 1 + totalPages) % totalPages);
   };
-  
+    // Extract gradient colors for bars
+  const getBarColor = (color) => {
+    const colors = color.match(/from-(\w+)-\d+\sto-(\w+)-\d+/);
+    if (colors) {
+      const colorMap = {
+        green: '#10b981',
+        emerald: '#10b981',
+        orange: '#f59e0b',
+        amber: '#f59e0b',
+        blue: '#3b82f6',
+        cyan: '#06b6d4',
+        purple: '#8b5cf6',
+        violet: '#8b5cf6',
+        red: '#ef4444',
+        pink: '#ec4899',
+        indigo: '#6366f1',
+        gray: '#6b7280',
+        slate: '#64748b',
+        teal: '#14b8a6',
+        yellow: '#eab308',
+      };
+      return colorMap[colors[1]] || '#6b7280';
+    }
+    return '#6b7280';
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -202,7 +226,7 @@ export default function VoteChart({ sortBy = 'votes' }) {
             top: 20, 
             right: isMobile ? 0 : 30, 
             left: isMobile ? 0 : -16, 
-            bottom: isMobile ? 60 : 80 
+            bottom: isMobile ? 10 : 80 
           }}
           style={{ backgroundColor: 'transparent' }}
         >
@@ -246,37 +270,30 @@ export default function VoteChart({ sortBy = 'votes' }) {
           {/* Upvotes bars (positive, going up) */}
           <Bar 
             dataKey="upvotes" 
-            fill="#10b981"
             radius={[2, 2, 0, 0]}
             maxBarSize={isMobile ? 40 : 60}
-          />
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`upvote-${index}`} fill={getBarColor(entry.color)} />
+            ))}
+          </Bar>
           
-          {/* Downvotes bars (negative, going down with 75% opacity) */}
+          {/* Downvotes bars (negative, going down with 70% opacity) */}
           <Bar 
             dataKey="downvotes" 
-            fill="#ef4444"
-            fillOpacity={0.75}
+            fillOpacity={0.7}
             radius={[0, 0, 2, 2]}
             maxBarSize={isMobile ? 40 : 60}
-          />
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`downvote-${index}`} fill={getBarColor(entry.color)} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
-      
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-6 mt-4 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-green-500 rounded"></div>
-          <span className="text-muted-foreground">Upvotes</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-red-500 opacity-75 rounded"></div>
-          <span className="text-muted-foreground">Downvotes</span>
-        </div>
-      </div>
-      
       {/* Pagination dots */}
       {totalPages > 1 && (
-        <div className="flex justify-center mt-4 gap-2">
+        <div className="flex justify-center gap-2">
           {Array.from({ length: totalPages }).map((_, index) => (
             <button
               key={index}
@@ -290,21 +307,6 @@ export default function VoteChart({ sortBy = 'votes' }) {
           ))}
         </div>
       )}
-      
-      {/* Helper text */}
-      <div className="text-center mt-3">
-        <p className="text-xs text-muted-foreground/70 font-light">
-          Green bars show upvotes (↑), red bars show downvotes (↓)
-          {totalPages > 1 && (
-            <span className="block mt-1">
-              {isMobile 
-                ? `Tap arrows or dots to see more • Showing ${Math.min(itemsPerPage, chartData.length)} of ${allChartData.length} LLMs`
-                : `Use arrows or click dots to navigate • Showing ${Math.min(itemsPerPage, chartData.length)} of ${allChartData.length} LLMs`
-              }
-            </span>
-          )}
-        </p>
-      </div>
     </motion.div>
   );
 }
