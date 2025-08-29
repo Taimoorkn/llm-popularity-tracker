@@ -285,26 +285,26 @@ ALTER PUBLICATION supabase_realtime ADD TABLE vote_stats_aggregate;
 -- ============================================
 
 INSERT INTO llms (id, name, company, release_year) VALUES
+('gpt-5', 'GPT-5', 'OpenAI', 2025),
+('claude-4-sonnet', 'Claude 4 Sonnet', 'Anthropic', 2025),
+('claude-4-opus', 'Claude 4 Opus', 'Anthropic', 2025),
+('gemini-2-5-pro', 'Gemini 2.5 Pro', 'Google', 2025),
+('deepseek-r1', 'DeepSeek R1', 'DeepSeek', 2025),
 ('gpt-4o', 'GPT-4o', 'OpenAI', 2024),
-('claude-3-5-sonnet', 'Claude 3.5 Sonnet', 'Anthropic', 2024),
-('gemini-ultra', 'Gemini Ultra', 'Google', 2024),
-('llama-3-70b', 'Llama 3 70B', 'Meta', 2024),
-('mistral-large', 'Mistral Large', 'Mistral AI', 2024),
-('command-r-plus', 'Command R+', 'Cohere', 2024),
-('grok', 'Grok', 'xAI', 2023),
-('perplexity', 'Perplexity', 'Perplexity AI', 2024),
+('o3', 'OpenAI o3', 'OpenAI', 2025),
+('o4-mini', 'OpenAI o4-mini', 'OpenAI', 2025),
+('llama-4-maverick', 'Llama 4 Maverick', 'Meta', 2025),
+('llama-4-scout', 'Llama 4 Scout', 'Meta', 2025),
+('grok-3', 'Grok 3', 'xAI', 2025),
+('gemini-2-5-flash', 'Gemini 2.5 Flash', 'Google', 2025),
 ('qwen-2-5', 'Qwen 2.5', 'Alibaba', 2024),
-('deepseek-coder', 'DeepSeek Coder', 'DeepSeek', 2024),
-('phi-3', 'Phi-3', 'Microsoft', 2024),
-('falcon-180b', 'Falcon 180B', 'TII UAE', 2023),
-('vicuna-33b', 'Vicuna-33B', 'LMSYS', 2023),
-('solar-10-7b', 'SOLAR-10.7B', 'Upstage AI', 2024),
-('yi-34b', 'Yi-34B', '01.AI', 2024),
-('mixtral-8x7b', 'Mixtral 8x7B', 'Mistral AI', 2024),
-('bard', 'Bard (Gemini Pro)', 'Google', 2024),
-('ernie-4', 'ERNIE 4.0', 'Baidu', 2024),
-('stablelm-2', 'StableLM 2', 'Stability AI', 2024),
-('inflection-2-5', 'Inflection-2.5', 'Inflection AI', 2024);
+('mistral-large-2', 'Mistral Large 2', 'Mistral AI', 2024),
+('command-r-plus', 'Command R+', 'Cohere', 2024),
+('gpt-4-1', 'GPT-4.1', 'OpenAI', 2025),
+('deepseek-v3', 'DeepSeek V3', 'DeepSeek', 2024),
+('yi-lightning', 'Yi Lightning', '01.AI', 2024),
+('phi-4', 'Phi-4', 'Microsoft', 2025),
+('ernie-4-turbo', 'ERNIE 4.0 Turbo', 'Baidu', 2024);
 
 -- Initialize aggregates
 INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
