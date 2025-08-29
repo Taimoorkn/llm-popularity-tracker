@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import axios from 'axios';
 import { llmData } from '@/lib/llm-data';
 import fingerprintService from '@/lib/fingerprint';
+import voteManager from '@/lib/supabase/vote-manager';
 
 const useVoteStore = create((set, get) => ({
   llms: llmData,
@@ -10,83 +10,131 @@ const useVoteStore = create((set, get) => ({
   rankings: [],
   stats: {
     totalVotes: 0,
-    votesToday: 0,
+    uniqueVoters: 0,
     votesLastHour: 0,
-    trending: [],
+    votesToday: 0,
     topModel: null,
+    topModelVotes: 0,
   },
   loading: false,
   error: null,
   lastUpdate: null,
   fingerprint: null,
+  realtimeConnected: false,
+  lastVoteTime: 0,
+  voteThrottleMs: 2000, // 2 second throttle between votes
   
-  // Initialize votes and fingerprint
+  // Initialize votes and real-time connection
   initializeVotes: async () => {
+    console.log('🚀 Initializing Supabase vote store...');
     set({ loading: true, error: null });
+    
     try {
-      // Get fingerprint first
+      // Get fingerprint
       const fingerprint = await fingerprintService.getFingerprintWithFallbacks();
+      console.log('🔍 Fingerprint obtained:', fingerprint.substring(0, 8) + '...');
       set({ fingerprint });
       
-      // Load votes from localStorage first for immediate UI update
-      const localVotes = get().loadVotesFromLocalStorage();
-      if (localVotes.userVotes && Object.keys(localVotes.userVotes).length > 0) {
-        set({ userVotes: localVotes.userVotes });
-      }
+      // Sync initial data
+      const syncResult = await voteManager.syncUserData(fingerprint);
       
-      // Then sync with server
-      const response = await axios.post('/api/vote/sync', { fingerprint });
-      const serverData = {
-        votes: response.data.votes || {},
-        userVotes: response.data.userVotes || {},
-        rankings: response.data.rankings || [],
-        stats: response.data.stats || get().stats,
-        loading: false,
-        lastUpdate: new Date(),
-      };
-      
-      set(serverData);
-      
-      // Save to localStorage
-      get().saveVotesToLocalStorage(serverData);
-      
-    } catch (error) {
-      console.error('Failed to load votes:', error);
-      
-      // Try to load from localStorage as fallback
-      const localData = get().loadVotesFromLocalStorage();
-      if (localData.votes) {
-        set({ 
-          ...localData,
-          loading: false, 
-          error: 'Using offline data',
+      if (syncResult.success) {
+        set({
+          votes: syncResult.votes || {},
+          userVotes: syncResult.userVotes || {},
+          rankings: syncResult.rankings || [],
+          stats: syncResult.stats || get().stats,
+          loading: false,
+          lastUpdate: new Date(),
         });
+        
+        // Initialize real-time subscriptions with optimized partial updates
+        const realtimeSuccess = await voteManager.initializeRealtime(
+          // Partial vote update - only update the specific LLM that changed
+          (voteUpdate) => {
+            console.log('📡 Real-time aggregate update for:', voteUpdate.llmId);
+            const currentVotes = get().votes;
+            set({ 
+              votes: {
+                ...currentVotes,
+                [voteUpdate.llmId]: voteUpdate.votes
+              },
+              lastUpdate: new Date()
+            });
+            get().updateRankings();
+          },
+          // Global stats update
+          (statsUpdate) => {
+            console.log('📊 Real-time global stats update');
+            set({ 
+              stats: {
+                totalVotes: statsUpdate.totalVotes || 0,
+                uniqueVoters: statsUpdate.uniqueVoters || 0,
+                votesLastHour: statsUpdate.votesLastHour || 0,
+                votesToday: statsUpdate.votesToday || 0,
+                topModel: statsUpdate.topModel,
+                topModelVotes: statsUpdate.topModelVotes || 0
+              }
+            });
+          }
+        );
+        
+        set({ realtimeConnected: realtimeSuccess });
+        console.log('✅ Vote store initialized with real-time:', realtimeSuccess);
       } else {
-        set({ 
-          loading: false, 
-          error: 'Failed to load votes',
-        });
-        // Initialize with zero votes
-        const initialVotes = {};
-        llmData.forEach(llm => {
-          initialVotes[llm.id] = 0;
-        });
-        set({ votes: initialVotes });
+        throw new Error(syncResult.error || 'Failed to sync data');
       }
+    } catch (error) {
+      console.error('❌ Failed to initialize:', error);
+      set({ 
+        loading: false, 
+        error: 'Failed to connect to voting system',
+      });
+      
+      // Initialize with zero votes as fallback
+      const initialVotes = {};
+      llmData.forEach(llm => {
+        initialVotes[llm.id] = 0;
+      });
+      set({ votes: initialVotes });
     }
   },
   
   // Vote for an LLM
   vote: async (llmId, voteType) => {
-    const currentUserVote = get().userVotes[llmId] || 0;
-    const fingerprint = get().fingerprint;
+    console.log('🗳️ Voting:', { llmId, voteType });
     
+    const fingerprint = get().fingerprint;
     if (!fingerprint) {
       console.error('No fingerprint available');
       return;
     }
     
-    // Optimistically update UI
+    // Check rate limiting
+    const now = Date.now();
+    const timeSinceLastVote = now - get().lastVoteTime;
+    const throttleMs = get().voteThrottleMs;
+    
+    if (timeSinceLastVote < throttleMs) {
+      const waitTime = Math.ceil((throttleMs - timeSinceLastVote) / 1000);
+      set({ error: `Please wait ${waitTime} second${waitTime > 1 ? 's' : ''} between votes` });
+      setTimeout(() => set({ error: null }), 2000);
+      console.log(`Rate limited: ${timeSinceLastVote}ms since last vote, need ${throttleMs}ms`);
+      return { success: false, rateLimited: true };
+    }
+    
+    const currentUserVote = get().userVotes[llmId] || 0;
+    
+    // Don't vote if it's the same
+    if (currentUserVote === voteType) {
+      console.log('Same vote, ignoring');
+      return { success: false, sameVote: true };
+    }
+    
+    // Update last vote time
+    set({ lastVoteTime: now });
+    
+    // Optimistic update
     const optimisticVotes = { ...get().votes };
     const optimisticUserVotes = { ...get().userVotes };
     
@@ -94,54 +142,100 @@ const useVoteStore = create((set, get) => ({
     const voteChange = voteType - currentUserVote;
     optimisticVotes[llmId] = (optimisticVotes[llmId] || 0) + voteChange;
     
+    // Update user vote
     if (voteType === 0) {
       delete optimisticUserVotes[llmId];
     } else {
       optimisticUserVotes[llmId] = voteType;
     }
     
-    const newState = { 
+    set({ 
       votes: optimisticVotes,
       userVotes: optimisticUserVotes,
-    };
-    
-    set(newState);
-    
-    // Save to localStorage immediately
-    get().saveVotesToLocalStorage(newState);
+    });
     
     try {
-      const response = await axios.post('/api/vote', { 
-        fingerprint, 
+      // Submit vote to Supabase
+      const result = await voteManager.vote(
         llmId, 
-        voteType 
-      });
+        fingerprint, 
+        voteType,
+        {
+          ip: window.location.hostname,
+          userAgent: navigator.userAgent
+        }
+      );
       
-      if (response.data.success) {
-        const serverState = {
-          votes: response.data.votes,
-          userVotes: { ...get().userVotes, [llmId]: response.data.userVote },
-          lastUpdate: new Date(),
-        };
-        
-        set(serverState);
-        
-        // Update rankings
+      if (!result.success) {
+        // Handle database rate limiting (not an error, just feedback)
+        if (result.wait_seconds) {
+          console.log('📊 Database rate limit triggered, showing countdown');
+          
+          // Revert optimistic update for rate limit
+          const revertedVotes = { ...get().votes };
+          revertedVotes[llmId] = (revertedVotes[llmId] || 0) - voteChange;
+          
+          const revertedUserVotes = { ...get().userVotes };
+          if (currentUserVote === 0) {
+            delete revertedUserVotes[llmId];
+          } else {
+            revertedUserVotes[llmId] = currentUserVote;
+          }
+          
+          set({ 
+            votes: revertedVotes,
+            userVotes: revertedUserVotes,
+            error: result.error
+          });
+          
+          // Show countdown for database rate limits
+          let remainingSeconds = Math.ceil(result.wait_seconds);
+          const countdownTimer = setInterval(() => {
+            remainingSeconds--;
+            if (remainingSeconds > 0) {
+              set({ error: `Rate limited. Please wait ${remainingSeconds} seconds before voting again.` });
+            } else {
+              set({ error: null });
+              clearInterval(countdownTimer);
+            }
+          }, 1000);
+          
+          return { success: false, rateLimited: true, wait_seconds: result.wait_seconds };
+        } else {
+          // Actual error (not rate limit)
+          console.error('Vote failed:', result.error);
+          
+          const revertedVotes = { ...get().votes };
+          revertedVotes[llmId] = (revertedVotes[llmId] || 0) - voteChange;
+          
+          const revertedUserVotes = { ...get().userVotes };
+          if (currentUserVote === 0) {
+            delete revertedUserVotes[llmId];
+          } else {
+            revertedUserVotes[llmId] = currentUserVote;
+          }
+          
+          set({ 
+            votes: revertedVotes,
+            userVotes: revertedUserVotes,
+            error: result.error || 'Failed to submit vote'
+          });
+          
+          setTimeout(() => set({ error: null }), 3000);
+          return { success: false, error: result.error };
+        }
+      } else {
+        console.log('✅ Vote successful');
+        // Real-time will handle the update
         get().updateRankings();
-        
-        // Save updated state to localStorage
-        get().saveVotesToLocalStorage(serverState);
+        return { success: true };
       }
     } catch (error) {
-      console.error('Vote failed:', error);
-      
-      // Don't revert - keep the optimistic update as it's saved locally
-      set({ 
-        error: 'Failed to sync vote with server',
-      });
-      
-      // Clear error after 3 seconds
+      console.error('❌ Vote error:', error);
+      // Keep optimistic update but show error
+      set({ error: 'Vote may not have been saved' });
       setTimeout(() => set({ error: null }), 3000);
+      return { success: false, error: error.message };
     }
   },
   
@@ -149,8 +243,13 @@ const useVoteStore = create((set, get) => ({
   updateRankings: () => {
     const votes = get().votes;
     const rankings = Object.entries(votes)
-      .map(([id, count]) => ({ id, count }))
+      .map(([id, count]) => ({ 
+        id, 
+        count,
+        name: get().getLLMById(id)?.name || id
+      }))
       .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
       .map((item, index) => ({ ...item, rank: index + 1 }));
     
     set({ rankings });
@@ -159,12 +258,8 @@ const useVoteStore = create((set, get) => ({
   // Fetch latest stats
   fetchStats: async () => {
     try {
-      const response = await axios.get('/api/stats');
-      set({
-        stats: response.data.stats,
-        rankings: response.data.rankings,
-        lastUpdate: new Date(),
-      });
+      const stats = await voteManager.getStats();
+      set({ stats, lastUpdate: new Date() });
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     }
@@ -185,110 +280,65 @@ const useVoteStore = create((set, get) => ({
     return get().votes[llmId] || 0;
   },
   
-  // Check if LLM is trending
+  // Check if LLM is trending (top 3)
   isTrending: (llmId) => {
-    return get().stats.trending.includes(llmId);
+    const rankings = get().rankings;
+    const item = rankings.find(r => r.id === llmId);
+    return item ? item.rank <= 3 : false;
   },
   
   // Get rank position for an LLM
   getRank: (llmId) => {
-    const ranking = get().rankings.find(r => r.id === llmId);
-    return ranking ? ranking.rank : null;
+    const rankings = get().rankings;
+    const item = rankings.find(r => r.id === llmId);
+    return item ? item.rank : null;
   },
   
-  // Save votes to localStorage
-  saveVotesToLocalStorage: (state) => {
-    if (typeof window === 'undefined') return;
+  // Manual sync with server
+  syncWithServer: async () => {
+    const fingerprint = get().fingerprint;
+    if (!fingerprint) return;
     
     try {
-      const dataToSave = {
-        votes: state.votes || get().votes,
-        userVotes: state.userVotes || get().userVotes,
-        lastUpdate: state.lastUpdate || get().lastUpdate,
-        timestamp: new Date().toISOString(),
-      };
-      
-      localStorage.setItem('llm-tracker-votes', JSON.stringify(dataToSave));
-      sessionStorage.setItem('llm-tracker-votes-backup', JSON.stringify(dataToSave));
-      
-      // Also save with fingerprint as key for additional persistence
-      const fingerprint = get().fingerprint;
-      if (fingerprint) {
-        localStorage.setItem(`llm-tracker-votes-${fingerprint}`, JSON.stringify(dataToSave));
+      const syncResult = await voteManager.syncUserData(fingerprint);
+      if (syncResult.success) {
+        set({
+          votes: syncResult.votes || get().votes,
+          userVotes: syncResult.userVotes || get().userVotes,
+          rankings: syncResult.rankings || get().rankings,
+          stats: syncResult.stats || get().stats,
+          lastUpdate: new Date(),
+        });
       }
     } catch (error) {
-      console.error('Failed to save votes to localStorage:', error);
+      console.debug('Sync failed:', error);
     }
   },
   
-  // Load votes from localStorage
-  loadVotesFromLocalStorage: () => {
-    if (typeof window === 'undefined') return {};
-    
-    try {
-      // Try primary storage first
-      let stored = localStorage.getItem('llm-tracker-votes');
-      
-      if (!stored) {
-        // Try sessionStorage backup
-        stored = sessionStorage.getItem('llm-tracker-votes-backup');
-      }
-      
-      if (!stored) {
-        // Try fingerprint-based storage
-        const fingerprint = get().fingerprint;
-        if (fingerprint) {
-          stored = localStorage.getItem(`llm-tracker-votes-${fingerprint}`);
-        }
-      }
-      
-      if (stored) {
-        const data = JSON.parse(stored);
-        return {
-          votes: data.votes || {},
-          userVotes: data.userVotes || {},
-          lastUpdate: data.lastUpdate ? new Date(data.lastUpdate) : null,
-        };
-      }
-    } catch (error) {
-      console.error('Failed to load votes from localStorage:', error);
-    }
-    
-    return {};
-  },
-  
-  // Clear all stored data (for testing or user request)
+  // Clear all data (for testing)
   clearAllStoredData: () => {
-    if (typeof window === 'undefined') return;
-    
-    try {
-      localStorage.removeItem('llm-tracker-votes');
-      sessionStorage.removeItem('llm-tracker-votes-backup');
-      
-      // Clear fingerprint-based storage
-      const fingerprint = get().fingerprint;
-      if (fingerprint) {
-        localStorage.removeItem(`llm-tracker-votes-${fingerprint}`);
+    fingerprintService.clearFingerprint();
+    set({
+      votes: {},
+      userVotes: {},
+      fingerprint: null,
+      rankings: [],
+      stats: {
+        totalVotes: 0,
+        uniqueVoters: 0,
+        votesLastHour: 0,
+        votesToday: 0,
+        topModel: null,
+        topModelVotes: 0,
       }
-      
-      // Clear fingerprint
-      fingerprintService.clearFingerprint();
-      
-      // Reset state
-      const initialVotes = {};
-      llmData.forEach(llm => {
-        initialVotes[llm.id] = 0;
-      });
-      
-      set({
-        votes: initialVotes,
-        userVotes: {},
-        fingerprint: null,
-      });
-    } catch (error) {
-      console.error('Failed to clear stored data:', error);
-    }
+    });
   },
+  
+  // Cleanup on unmount
+  cleanup: () => {
+    voteManager.cleanup();
+    set({ realtimeConnected: false });
+  }
 }));
 
 export default useVoteStore;

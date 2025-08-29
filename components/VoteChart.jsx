@@ -13,21 +13,53 @@ import {
   Cell,
 } from 'recharts';
 import useVoteStore from '@/store/useVoteStore';
-import { BarChart3, PieChart } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function VoteChart() {
-  const [chartType, setChartType] = useState('bar');
-  const { rankings, llms } = useVoteStore();
+export default function VoteChart({ sortBy = 'votes' }) {
+  const [isMobile, setIsMobile] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const { votes, llms, getVoteCount } = useVoteStore();
   
-  // Prepare chart data
-  const chartData = rankings.slice(0, 10).map((item) => {
-    const llm = llms.find((l) => l.id === item.id);
-    return {
-      name: llm?.name || item.id,
-      votes: item.count,
-      color: llm?.color || 'from-gray-500 to-gray-600',
+  // Check if mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
     };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  // Prepare chart data - show ALL LLMs with their vote counts
+  const allChartData = llms.map((llm) => {
+    const voteCount = votes[llm.id] || 0;
+    return {
+      name: llm.name,
+      votes: voteCount,
+      color: llm.color || 'from-gray-500 to-gray-600',
+      id: llm.id,
+      company: llm.company,
+    };
+  }).sort((a, b) => {
+    // Use the same sorting logic as the main page
+    if (sortBy === 'votes') {
+      return b.votes - a.votes; // Sort by votes descending
+    } else if (sortBy === 'name') {
+      return a.name.localeCompare(b.name); // Sort by name ascending
+    } else if (sortBy === 'company') {
+      return a.company.localeCompare(b.company); // Sort by company ascending
+    }
+    return 0;
   });
+  
+  // Mobile pagination
+  const itemsPerPage = isMobile ? 6 : allChartData.length;
+  const totalPages = Math.ceil(allChartData.length / itemsPerPage);
+  const startIndex = currentPage * itemsPerPage;
+  const chartData = isMobile 
+    ? allChartData.slice(startIndex, startIndex + itemsPerPage)
+    : allChartData;
   
   // Extract gradient colors for bars
   const getBarColor = (color) => {
@@ -58,68 +90,169 @@ export default function VoteChart() {
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload[0]) {
       return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-          <p className="font-bold text-foreground">{payload[0].payload.name}</p>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-xl p-3 pointer-events-none"
+        >
+          <p className="font-semibold text-foreground text-sm">{payload[0].payload.name}</p>
           <p className="text-sm text-muted-foreground">
             Votes: <span className="text-primary font-bold">{payload[0].value}</span>
           </p>
-        </div>
+        </motion.div>
       );
     }
     return null;
+  };
+
+  // Custom label formatter for mobile
+  const formatLabel = (name) => {
+    if (!isMobile) return name;
+    
+    // Truncate long names on mobile
+    if (name.length > 8) {
+      return name.substring(0, 6) + '...';
+    }
+    return name;
+  };
+  
+  const nextPage = () => {
+    setCurrentPage((prev) => (prev + 1) % totalPages);
+  };
+  
+  const prevPage = () => {
+    setCurrentPage((prev) => (prev - 1 + totalPages) % totalPages);
   };
   
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-card border border-border rounded-lg p-6"
+      className="bg-card border border-border rounded-lg p-4 md:p-6"
     >
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <BarChart3 size={24} className="text-primary" />
-          Top 10 Rankings
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <h2 className="text-lg md:text-xl font-bold text-foreground flex items-center gap-2">
+          <BarChart3 size={isMobile ? 20 : 24} className="text-primary" />
+          <span className="font-sora">All LLM {sortBy === 'votes' ? 'Votes' : sortBy === 'name' ? 'Names' : 'Companies'}</span>
         </h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setChartType('bar')}
-            className={`p-2 rounded-lg transition-all ${
-              chartType === 'bar' ? 'bg-primary text-white' : 'bg-card-hover text-muted-foreground'
-            }`}
-          >
-            <BarChart3 size={16} />
-          </button>
-        </div>
+        
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={prevPage}
+              className={`p-2 rounded-lg bg-muted/10 text-muted-foreground transition-colors disabled:opacity-50 ${
+                isMobile ? 'active:bg-muted/20' : 'md:hover:bg-muted/20'
+              }`}
+              disabled={currentPage === 0}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-xs text-muted-foreground font-mono">
+              {currentPage + 1}/{totalPages}
+            </span>
+            <button
+              onClick={nextPage}
+              className={`p-2 rounded-lg bg-muted/10 text-muted-foreground transition-colors disabled:opacity-50 ${
+                isMobile ? 'active:bg-muted/20' : 'md:hover:bg-muted/20'
+              }`}
+              disabled={currentPage === totalPages - 1}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </div>
       
-      {chartData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-            <XAxis
-              dataKey="name"
-              angle={-45}
-              textAnchor="end"
-              height={100}
-              tick={{ fill: '#9ca3af', fontSize: 12 }}
-              stroke="#27272a"
+      <ResponsiveContainer 
+        width="100%" 
+        height={isMobile ? 280 : 400}
+        style={{ 
+          backgroundColor: 'transparent',
+          cursor: 'pointer'
+        }}
+      >
+        <BarChart 
+          data={chartData} 
+          margin={{ 
+            top: 20, 
+            right: isMobile ? 0 : 30, 
+            left: isMobile ? 0 : -16, 
+            bottom: isMobile ? 0 : 80 
+          }}
+          style={{ backgroundColor: 'transparent' }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" opacity={0.3} />
+          <XAxis
+            dataKey="name"
+            angle={isMobile ? -45 : -45}
+            textAnchor="end"
+            height={isMobile ? 60 : 80}
+            tick={{ 
+              fill: '#9ca3af', 
+              fontSize: isMobile ? 10 : 11,
+              fontFamily: 'var(--font-inter)'
+            }}
+            stroke="#27272a"
+            interval={0}
+            tickFormatter={formatLabel}
+          />
+          <YAxis
+            tick={{ 
+              fill: '#9ca3af', 
+              fontSize: isMobile ? 10 : 12,
+              fontFamily: 'var(--font-inter)'
+            }}
+            stroke="#27272a"
+            domain={['dataMin - 1', 'dataMax + 1']}
+            width={isMobile ? 35 : 50}
+          />
+          <Tooltip 
+            content={<CustomTooltip />} 
+            cursor={{ fill: 'transparent' }}
+            wrapperStyle={{ 
+              backgroundColor: 'transparent',
+              border: 'none',
+              outline: 'none'
+            }}
+          />
+          <Bar 
+            dataKey="votes" 
+            radius={[4, 4, 0, 0]}
+            maxBarSize={isMobile ? 40 : 60}
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={getBarColor(entry.color)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      
+      {/* Pagination dots */}
+      {totalPages > 1 && (
+        <div className="flex justify-center mt-4 gap-2">
+          {Array.from({ length: totalPages }).map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentPage(index)}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                index === currentPage 
+                  ? 'bg-primary' 
+                  : `bg-muted-foreground/30 ${isMobile ? 'active:bg-muted-foreground/60' : 'md:hover:bg-muted-foreground/50'}`
+              }`}
             />
-            <YAxis
-              tick={{ fill: '#9ca3af' }}
-              stroke="#27272a"
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="votes" radius={[8, 8, 0, 0]}>
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getBarColor(entry.color)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-          No voting data available yet
+          ))}
         </div>
+      )}
+      
+      {/* Helper text for pagination */}
+      {totalPages > 1 && (
+        <p className="text-xs text-muted-foreground/70 text-center mt-3 font-light">
+          {isMobile 
+            ? `Tap arrows or dots to see more • Showing ${Math.min(itemsPerPage, chartData.length)} of ${allChartData.length} LLMs`
+            : `Use arrows or click dots to navigate • Showing ${Math.min(itemsPerPage, chartData.length)} of ${allChartData.length} LLMs`
+          }
+        </p>
       )}
     </motion.div>
   );

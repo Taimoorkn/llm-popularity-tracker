@@ -4,7 +4,18 @@
       "Bash(npx create-next-app:*)",
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
-      "Bash(npx tailwindcss init:*)"
+      "Bash(npx tailwindcss init:*)",
+      "WebSearch",
+      "Bash(docker exec:*)",
+      "Bash(docker-compose:*)",
+      "Bash(npm run:*)",
+      "Bash(node:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(curl:*)",
+      "Bash(del /f docker-compose.yml Dockerfile nginx.conf server.js)",
+      "Bash(tree:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

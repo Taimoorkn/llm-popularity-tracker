@@ -2,86 +2,142 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, TrendingUp, Grid3x3, List } from 'lucide-react';
-import { Toaster } from 'sonner';
+import { Search, Wifi, WifiOff } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 import Header from '@/components/Header';
 import LLMCard from '@/components/LLMCard';
 import StatsPanel from '@/components/StatsPanel';
 import VoteChart from '@/components/VoteChart';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import useVoteStore from '@/store/useVoteStore';
 
 export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('votes'); // votes, name, company
-  const [viewMode, setViewMode] = useState('grid'); // grid, list
-  const [showChart, setShowChart] = useState(false);
   
-  const { llms, initializeVotes, rankings, loading } = useVoteStore();
+  const { 
+    llms, 
+    initializeVotes, 
+    loading,
+    realtimeConnected,
+    cleanup,
+    error
+  } = useVoteStore();
   
   useEffect(() => {
+    // Initialize Supabase connection
     initializeVotes();
-    // Set up polling for real-time updates
-    const interval = setInterval(() => {
-      initializeVotes();
-    }, 10000); // Update every 10 seconds
     
-    return () => clearInterval(interval);
-  }, [initializeVotes]);
+    // Show connection status
+    const timer = setTimeout(() => {
+      if (realtimeConnected) {
+        toast.success('Connected to real-time updates', {
+          icon: <Wifi className="w-4 h-4" />,
+          duration: 2000
+        });
+      }
+    }, 2000);
+    
+    // Cleanup on unmount
+    return () => {
+      clearTimeout(timer);
+      cleanup();
+    };
+  }, []);
+  
+  // Show error toast if there's an error
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
   
   // Filter and sort LLMs
-  const filteredAndSortedLLMs = llms
+  const filteredLLMs = llms
     .filter(llm => 
       llm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      llm.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      llm.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (sortBy === 'votes') {
-        const aRank = rankings.find(r => r.id === a.id)?.rank || 999;
-        const bRank = rankings.find(r => r.id === b.id)?.rank || 999;
-        return aRank - bRank;
-      } else if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortBy === 'company') {
-        return a.company.localeCompare(b.company);
-      }
-      return 0;
-    });
+      llm.company.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  
+  const sortedLLMs = [...filteredLLMs].sort((a, b) => {
+    const store = useVoteStore.getState();
+    
+    if (sortBy === 'votes') {
+      const aVotes = store.getVoteCount(a.id);
+      const bVotes = store.getVoteCount(b.id);
+      return bVotes - aVotes;
+    } else if (sortBy === 'name') {
+      return a.name.localeCompare(b.name);
+    } else if (sortBy === 'company') {
+      return a.company.localeCompare(b.company);
+    }
+    return 0;
+  });
   
   return (
     <div className="min-h-screen bg-background">
       <Toaster position="bottom-right" theme="dark" />
       <Header />
       
-      <main className="container mx-auto px-4 py-8">
-        {/* Hero Section */}
+      {/* Real-time Connection Indicator - Mobile Optimized */}
+      <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border ${
+            realtimeConnected 
+              ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+              : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+          }`}
+        >
+          {realtimeConnected ? (
+            <>
+              <Wifi className="w-3 h-3" />
+              <span className="hidden sm:inline">Live</span>
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3 h-3" />
+              <span className="hidden sm:inline">Connecting...</span>
+            </>
+          )}
+        </motion.div>
+      </div>
+      
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8">
+        {/* Hero Section - Mobile Optimized */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
+          className="text-center mb-4 sm:mb-6 px-2"
         >
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-light text-foreground mb-2 sm:mb-3 font-sora leading-tight">
             Which LLM Rules in 2025?
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Cast your vote for the AI models you love. Upvote your favorites, downvote the ones you don't prefer.
-            Every vote counts in determining the community's choice!
+          <p className="text-muted-foreground/80 max-w-xl mx-auto text-xs sm:text-sm font-light font-inter leading-relaxed px-4 sm:px-0">
+            By the people. For the people.
           </p>
         </motion.div>
         
         {/* Stats Panel */}
-        <StatsPanel />
+        <ErrorBoundary 
+          title="Stats unavailable" 
+          message="Unable to load statistics. Voting still works!"
+        >
+          <StatsPanel />
+        </ErrorBoundary>
         
-        {/* Controls */}
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
+        {/* Controls - Mobile Optimized */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4 sm:mb-6">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={20} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground/60" size={16} />
             <input
               type="text"
               placeholder="Search LLMs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              className="w-full pl-9 pr-4 py-2.5 sm:py-2 bg-card/50 border border-border/30 rounded-lg text-foreground text-sm font-light placeholder-muted-foreground/50 focus:outline-none focus:border-primary/50 focus:bg-card/70 transition-all font-inter touch-manipulation"
             />
           </div>
           
@@ -89,49 +145,26 @@ export default function Home() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-2 bg-card border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors"
+              className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 sm:py-2 bg-card/50 border border-border/30 rounded-lg text-foreground text-sm font-light focus:outline-none focus:border-primary/50 focus:bg-card/70 transition-all font-inter min-w-0 touch-manipulation"
             >
-              <option value="votes">Sort by Votes</option>
-              <option value="name">Sort by Name</option>
-              <option value="company">Sort by Company</option>
+              <option value="votes">By Votes</option>
+              <option value="name">By Name</option>
+              <option value="company">By Company</option>
             </select>
-            
-            <button
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              className="p-2 bg-card border border-border rounded-lg text-foreground hover:bg-card-hover transition-colors"
-              aria-label="Toggle view mode"
-            >
-              {viewMode === 'grid' ? <List size={20} /> : <Grid3x3 size={20} />}
-            </button>
-            
-            <button
-              onClick={() => setShowChart(!showChart)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                showChart 
-                  ? 'bg-primary text-white' 
-                  : 'bg-card border border-border text-foreground hover:bg-card-hover'
-              }`}
-            >
-              <TrendingUp size={20} />
-            </button>
           </div>
         </div>
         
-        {/* Chart */}
-        <AnimatePresence>
-          {showChart && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-8"
-            >
-              <VoteChart />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Chart - Mobile Optimized */}
+        <ErrorBoundary 
+          title="Chart unavailable"
+          message="Unable to display the voting chart."
+        >
+          <div className="mb-4 sm:mb-6 md:mb-8">
+            <VoteChart sortBy={sortBy} />
+          </div>
+        </ErrorBoundary>
         
-        {/* LLM Grid/List */}
+        {/* LLM Grid */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <motion.div
@@ -143,19 +176,45 @@ export default function Home() {
         ) : (
           <motion.div
             layout
-            className={`grid gap-6 ${
-              viewMode === 'grid' 
-                ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
-                : 'grid-cols-1'
-            }`}
+            className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7"
           >
-            {filteredAndSortedLLMs.map((llm, index) => (
-              <LLMCard key={llm.id} llm={llm} index={index} />
-            ))}
+            <AnimatePresence mode="popLayout">
+              {sortedLLMs.map((llm, index) => (
+                <motion.div
+                  key={llm.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ 
+                    duration: 0.3,
+                    delay: index * 0.02
+                  }}
+                >
+                  <ErrorBoundary
+                    title="Card error"
+                    message={`Unable to display ${llm.name}`}
+                    fallback={(error, reset) => (
+                      <div className="bg-card/50 border border-red-500/20 rounded-lg p-4 text-center">
+                        <p className="text-xs text-muted-foreground mb-2">Error loading {llm.name}</p>
+                        <button 
+                          onClick={reset}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                  >
+                    <LLMCard llm={llm} index={index} />
+                  </ErrorBoundary>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </motion.div>
         )}
         
-        {filteredAndSortedLLMs.length === 0 && !loading && (
+        {sortedLLMs.length === 0 && !loading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -168,14 +227,15 @@ export default function Home() {
         )}
       </main>
       
-      {/* Footer */}
-      <footer className="border-t border-border mt-16 py-8">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-muted-foreground text-sm">
-            Made with ❤️ by the AI Community | 2025
+      {/* Footer - Mobile Optimized */}
+      <footer className="border-t border-border/30 mt-8 sm:mt-12 py-4 sm:py-6">
+        <div className="container mx-auto px-3 sm:px-4 text-center">
+          <p className="text-muted-foreground/60 text-xs sm:text-sm font-light font-inter leading-relaxed">
+            Made with ❤️ by the Community
+            <span className="hidden sm:inline"> | Real-time scheduled intervals powered by Supabase</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            Vote responsibly. Each user can upvote or downvote any model.
+          <p className="text-xs text-muted-foreground/40 mt-1 sm:mt-1.5 font-light font-inter">
+            Vote responsibly. All votes update for everyone!
           </p>
         </div>
       </footer>

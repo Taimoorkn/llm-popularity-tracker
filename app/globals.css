@@ -8,13 +8,65 @@
     --foreground: #ededed;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Touch optimizations for mobile */
+  button, [role="button"], input, select {
+    touch-action: manipulation;
+  }
+
+  /* Prevent zoom on input focus on iOS Safari */
+  @media screen and (max-width: 767px) {
+    input[type="text"], 
+    input[type="search"], 
+    select {
+      font-size: 16px;
+    }
+  }
+  
+  /* Typography System */
+  .font-inter {
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  }
+  
+  .font-sora {
+    font-family: var(--font-sora), system-ui, -apple-system, sans-serif;
+  }
+  
+  .font-mono {
+    font-family: var(--font-mono), 'Courier New', monospace;
+  }
+  
+  /* Heading styles with lighter weights */
+  h1 {
+    @apply font-sora font-light tracking-tight;
+  }
+  
+  h2 {
+    @apply font-sora font-normal tracking-tight;
+  }
+  
+  h3 {
+    @apply font-inter font-medium;
+  }
+  
+  p, span, div {
+    @apply font-inter font-light;
   }
 }
 
