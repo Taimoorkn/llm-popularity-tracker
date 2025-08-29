@@ -186,7 +186,21 @@ const useVoteStore = create((set, get) => ({
           error: result.error || 'Failed to submit vote'
         });
         
-        setTimeout(() => set({ error: null }), 3000);
+        // Show countdown for database rate limits
+        if (result.wait_seconds) {
+          let remainingSeconds = Math.ceil(result.wait_seconds);
+          const countdownTimer = setInterval(() => {
+            remainingSeconds--;
+            if (remainingSeconds > 0) {
+              set({ error: `Rate limited. Please wait ${remainingSeconds} seconds before voting again.` });
+            } else {
+              set({ error: null });
+              clearInterval(countdownTimer);
+            }
+          }, 1000);
+        } else {
+          setTimeout(() => set({ error: null }), 3000);
+        }
       } else {
         console.log('✅ Vote successful');
         // Real-time will handle the update
