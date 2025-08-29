@@ -56,8 +56,7 @@ export default function Home() {
   const filteredLLMs = llms
     .filter(llm => 
       llm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      llm.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      llm.description.toLowerCase().includes(searchTerm.toLowerCase())
+      llm.company.toLowerCase().includes(searchTerm.toLowerCase())
     );
   
   const sortedLLMs = [...filteredLLMs].sort((a, b) => {

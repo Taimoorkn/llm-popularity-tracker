@@ -177,7 +177,7 @@ export default function VoteChart({ sortBy = 'votes' }) {
           margin={{ 
             top: 20, 
             right: isMobile ? 0 : 30, 
-            left: isMobile ? 0 : 20, 
+            left: isMobile ? 0 : -16, 
             bottom: isMobile ? 0 : 80 
           }}
           style={{ backgroundColor: 'transparent' }}
