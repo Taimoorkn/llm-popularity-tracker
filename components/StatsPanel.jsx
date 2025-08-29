@@ -47,22 +47,24 @@ export default function StatsPanel() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: index * 0.1 }}
-          className="flex justify-between bg-card border border-border rounded-lg p-3 sm:p-4"
+          className="bg-card/80 border border-border/30 hover:border-border/50 rounded-xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-all duration-300"
         >
-          <div>
-            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-              <div className={`p-1.5 sm:p-2 rounded-lg ${stat.bgColor}`}>
-                <stat.icon size={16} className={`sm:w-5 sm:h-5 ${stat.color}`} />
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 sm:p-2.5 rounded-lg ${stat.bgColor}`}>
+                <stat.icon size={18} className={`sm:w-5 sm:h-5 ${stat.color}`} />
               </div>
-              {stat.label === 'Last Hour' && stats.votesLastHour > 0 && (
-                <TrendingUp size={14} className="sm:w-4 sm:h-4 text-success" />
-              )}
+              <div>
+                <p className="text-xs sm:text-sm text-muted-foreground/70 font-light font-inter mb-1">{stat.label}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground font-sora leading-none">
+                  {typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}
+                </p>
+              </div>
             </div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground/70 font-light font-inter leading-tight">{stat.label}</p>
+            {stat.label === 'Last Hour' && stats.votesLastHour > 0 && (
+              <TrendingUp size={16} className="sm:w-5 sm:h-5 text-success" />
+            )}
           </div>
-          <p className="text-xl sm:text-2xl md:text-3xl font-extralight text-foreground font-sora leading-none">
-            {typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}
-          </p>
         </motion.div>
       ))}
     </div>

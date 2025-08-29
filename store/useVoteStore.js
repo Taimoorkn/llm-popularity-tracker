@@ -6,6 +6,8 @@ import voteManager from '@/lib/supabase/vote-manager';
 const useVoteStore = create((set, get) => ({
   llms: llmData,
   votes: {},
+  upvotes: {},
+  downvotes: {},
   userVotes: {},
   rankings: [],
   stats: {
@@ -41,6 +43,8 @@ const useVoteStore = create((set, get) => ({
       if (syncResult.success) {
         set({
           votes: syncResult.votes || {},
+          upvotes: syncResult.upvotes || {},
+          downvotes: syncResult.downvotes || {},
           userVotes: syncResult.userVotes || {},
           rankings: syncResult.rankings || [],
           stats: syncResult.stats || get().stats,
@@ -54,10 +58,21 @@ const useVoteStore = create((set, get) => ({
           (voteUpdate) => {
             console.log('📡 Real-time aggregate update for:', voteUpdate.llmId);
             const currentVotes = get().votes;
+            const currentUpvotes = get().upvotes;
+            const currentDownvotes = get().downvotes;
+
             set({ 
               votes: {
                 ...currentVotes,
                 [voteUpdate.llmId]: voteUpdate.votes
+              },
+              upvotes: {
+                ...currentUpvotes,
+                [voteUpdate.llmId]: voteUpdate.upvotes
+              },
+              downvotes: {
+                ...currentDownvotes,
+                [voteUpdate.llmId]: voteUpdate.downvotes
               },
               lastUpdate: new Date()
             });
@@ -278,6 +293,14 @@ const useVoteStore = create((set, get) => ({
   // Get total votes for an LLM
   getVoteCount: (llmId) => {
     return get().votes[llmId] || 0;
+  },
+
+  getUpvoteCount: (llmId) => {
+    return get().upvotes[llmId] || 0;
+  },
+
+  getDownvoteCount: (llmId) => {
+    return get().downvotes[llmId] || 0;
   },
   
   // Check if LLM is trending (top 3)
