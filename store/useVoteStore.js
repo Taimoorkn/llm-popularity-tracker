@@ -205,12 +205,14 @@ const useVoteStore = create((set, get) => ({
         console.log('✅ Vote successful');
         // Real-time will handle the update
         get().updateRankings();
+        return { success: true };
       }
     } catch (error) {
       console.error('❌ Vote error:', error);
       // Keep optimistic update but show error
       set({ error: 'Vote may not have been saved' });
       setTimeout(() => set({ error: null }), 3000);
+      return { success: false, error: error.message };
     }
   },
   

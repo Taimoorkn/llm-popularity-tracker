@@ -28,14 +28,14 @@ export default function LLMCard({ llm, index }) {
       // Clear vote
       console.log('🎯 [CARD] Clearing vote for', llm.name);
       const result = await vote(llm.id, 0);
-      if (result && !result.rateLimited && !result.sameVote) {
+      if (result && result.success) {
         toast.success('Vote removed');
       }
     } else if (userVote !== voteType) {
       // Only vote if it's different from current vote
       console.log('🎯 [CARD] Casting new vote for', llm.name, ':', voteType === 1 ? 'UPVOTE' : 'DOWNVOTE');
       const result = await vote(llm.id, voteType);
-      if (result && !result.rateLimited && !result.sameVote) {
+      if (result && result.success) {
         toast.success(voteType === 1 ? 'Upvoted!' : 'Downvoted!');
       }
     } else {
