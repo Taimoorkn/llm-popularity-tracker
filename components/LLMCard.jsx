@@ -2,19 +2,28 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, X } from 'lucide-react';
+import { ChevronUp, ChevronDown, X, BarChart3 } from 'lucide-react';
 import useVoteStore from '@/store/useVoteStore';
 import { toast } from 'sonner';
 
 export default function LLMCard({ llm, index }) {
   const [imageError, setImageError] = useState(false);
-  const { vote, getUserVote, getVoteCount, isTrending, getRank } = useVoteStore();
+  const [showBreakdown, setShowBreakdown] = useState(false); // ADD: toggle breakdown view
+  
+  const { vote, getUserVote, getVoteCount, getUpvoteCount, getDownvoteCount, isTrending, getRank } = useVoteStore();
   
   const userVote = getUserVote(llm.id);
   const voteCount = getVoteCount(llm.id);
+  const upvoteCount = getUpvoteCount(llm.id); // ADD: get upvote count
+  const downvoteCount = getDownvoteCount(llm.id); // ADD: get downvote count
   const trending = isTrending(llm.id);
   const rank = getRank(llm.id);
   
+  // ADD: Calculate engagement stats
+  const totalEngagement = upvoteCount + downvoteCount;
+  const upvotePercentage = totalEngagement > 0 ? Math.round((upvoteCount / totalEngagement) * 100) : 0;
+  
+  // Existing handleVote function unchanged
   const handleVote = async (voteType) => {
     console.log('🎯 [CARD] Vote button clicked:', { 
       llm: llm.name, 
@@ -25,14 +34,12 @@ export default function LLMCard({ llm, index }) {
     });
     
     if (voteType === 0) {
-      // Clear vote
       console.log('🎯 [CARD] Clearing vote for', llm.name);
       const result = await vote(llm.id, 0);
       if (result && result.success) {
         toast.success('Vote removed');
       }
     } else if (userVote !== voteType) {
-      // Only vote if it's different from current vote
       console.log('🎯 [CARD] Casting new vote for', llm.name, ':', voteType === 1 ? 'UPVOTE' : 'DOWNVOTE');
       const result = await vote(llm.id, voteType);
       if (result && result.success) {
@@ -41,7 +48,6 @@ export default function LLMCard({ llm, index }) {
     } else {
       console.log('🎯 [CARD] Same vote clicked, ignoring:', { llm: llm.name, voteType });
     }
-    // If clicking the same vote button, do nothing (no toggle)
   };
   
   return (
@@ -101,12 +107,18 @@ export default function LLMCard({ llm, index }) {
         <div className="flex items-center gap-1 sm:gap-1.5">
           {/* Vote count - Mobile Optimized */}
           <div className="flex flex-col items-center px-1 sm:px-2">
-            <span className={`text-xs sm:text-sm font-medium font-mono ${
-              voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-500'
-            }`}>
+            <button
+              onClick={() => setShowBreakdown(!showBreakdown)}
+              className={`text-xs sm:text-sm font-medium font-mono transition-colors hover:opacity-80 cursor-pointer ${
+                voteCount > 0 ? 'text-green-400' : voteCount < 0 ? 'text-red-400' : 'text-gray-500'
+              }`}
+              title="Click to see vote breakdown"
+            >
               {voteCount > 0 ? '+' : ''}{voteCount}
+            </button>
+            <span className="text-[8px] sm:text-[9px] text-muted-foreground/50 font-inter font-light">
+              {totalEngagement > 0 ? `${upvotePercentage}%` : 'votes'}
             </span>
-            <span className="text-[8px] sm:text-[9px] text-muted-foreground/50 font-inter font-light">votes</span>
           </div>
           
           {/* Clear vote button - Mobile Optimized */}
@@ -142,6 +154,41 @@ export default function LLMCard({ llm, index }) {
           <ChevronDown size={14} className="sm:w-4 sm:h-4" strokeWidth={2} />
         </motion.button>
       </div>
+      <div className="bg-black/5 rounded-md p-2 mt-2 space-y-1.5">
+        <div className="flex justify-between items-center text-[10px] sm:text-xs">
+          <div className="flex items-center gap-1">
+            <ChevronUp size={10} className="text-green-400" />
+            <span className="text-green-400 font-medium">{upvoteCount}</span>
+            <span className="text-muted-foreground/60">upvotes</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <ChevronDown size={10} className="text-red-400" />
+            <span className="text-red-400 font-medium">{downvoteCount}</span>
+            <span className="text-muted-foreground/60">downvotes</span>
+          </div>
+        </div>
+        
+        {totalEngagement > 0 && (
+          <div className="flex items-center gap-1">
+            <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${upvotePercentage}%` }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+                className="h-full bg-gradient-to-r from-green-400 to-emerald-500"
+              />
+            </div>
+            <span className="text-[9px] text-muted-foreground/50 min-w-[24px]">
+              {upvotePercentage}%
+            </span>
+          </div>
+        )}
+        
+        <div className="flex items-center justify-center gap-1 text-[9px] text-muted-foreground/50">
+          <BarChart3 size={8} />
+          <span>{totalEngagement} total interactions</span>
+        </div>
+      </div> 
     </motion.div>
   );
 }
