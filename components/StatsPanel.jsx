@@ -47,10 +47,10 @@ export default function StatsPanel() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: index * 0.1 }}
-          className="flex justify-between bg-card border border-border rounded-lg p-3 sm:p-0"
+          className="flex justify-between bg-card border border-border rounded-lg p-3 sm:p-4"
         >
           <div>
-            <div className="flex items-center justify-between mb-1.5 sm:mb-0">
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
               <div className={`p-1.5 sm:p-2 rounded-lg ${stat.bgColor}`}>
                 <stat.icon size={16} className={`sm:w-5 sm:h-5 ${stat.color}`} />
               </div>

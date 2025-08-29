@@ -161,7 +161,7 @@ export default function Home() {
           message="Unable to display the voting chart."
         >
           <div className="mb-4 sm:mb-6 md:mb-8">
-            <VoteChart />
+            <VoteChart sortBy={sortBy} />
           </div>
         </ErrorBoundary>
         

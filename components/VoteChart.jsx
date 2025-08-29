@@ -15,10 +15,10 @@ import {
 import useVoteStore from '@/store/useVoteStore';
 import { BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function VoteChart() {
+export default function VoteChart({ sortBy = 'votes' }) {
   const [isMobile, setIsMobile] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const { votes, llms } = useVoteStore();
+  const { votes, llms, getVoteCount } = useVoteStore();
   
   // Check if mobile
   useEffect(() => {
@@ -39,8 +39,19 @@ export default function VoteChart() {
       votes: voteCount,
       color: llm.color || 'from-gray-500 to-gray-600',
       id: llm.id,
+      company: llm.company,
     };
-  }).sort((a, b) => b.votes - a.votes); // Sort by votes descending
+  }).sort((a, b) => {
+    // Use the same sorting logic as the main page
+    if (sortBy === 'votes') {
+      return b.votes - a.votes; // Sort by votes descending
+    } else if (sortBy === 'name') {
+      return a.name.localeCompare(b.name); // Sort by name ascending
+    } else if (sortBy === 'company') {
+      return a.company.localeCompare(b.company); // Sort by company ascending
+    }
+    return 0;
+  });
   
   // Mobile pagination
   const itemsPerPage = isMobile ? 6 : allChartData.length;
@@ -122,7 +133,7 @@ export default function VoteChart() {
       <div className="flex items-center justify-between mb-4 md:mb-6">
         <h2 className="text-lg md:text-xl font-bold text-foreground flex items-center gap-2">
           <BarChart3 size={isMobile ? 20 : 24} className="text-primary" />
-          <span className="font-sora">All LLM Votes</span>
+          <span className="font-sora">All LLM {sortBy === 'votes' ? 'Votes' : sortBy === 'name' ? 'Names' : 'Companies'}</span>
         </h2>
         
         {/* Pagination controls */}
