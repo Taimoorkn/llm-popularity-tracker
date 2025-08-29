@@ -110,7 +110,7 @@ DECLARE
   v_result JSON;
 BEGIN
   -- Check rate limiting (5 votes per minute max)
-  SELECT COUNT(*), MAX(created_at) INTO v_recent_votes, v_last_vote_time
+  SELECT COUNT(*), MIN(created_at) INTO v_recent_votes, v_last_vote_time
   FROM votes 
   WHERE fingerprint = p_fingerprint 
     AND created_at > NOW() - INTERVAL '1 minute';
@@ -119,7 +119,7 @@ BEGIN
     RETURN json_build_object(
       'success', false,
       'message', 'Rate limit exceeded. Please wait before voting again.',
-      'wait_seconds', 60 - EXTRACT(EPOCH FROM (NOW() - v_last_vote_time))::INTEGER
+      'wait_seconds', GREATEST(0, 60 - EXTRACT(EPOCH FROM (NOW() - v_last_vote_time))::INTEGER)
     );
   END IF;
   
