@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, TrendingUp, X } from 'lucide-react';
+import { ChevronUp, ChevronDown, X } from 'lucide-react';
 import useVoteStore from '@/store/useVoteStore';
 import { toast } from 'sonner';
 
@@ -61,18 +61,6 @@ export default function LLMCard({ llm, index }) {
         `}>
           {rank}
         </div>
-      )}
-      
-      {/* Trending Badge - more subtle */}
-      {trending && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute z-10 -top-3 -left-3 bg-gradient-to-r from-red-500/80 to-pink-500/80 text-white px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5 shadow-sm"
-        >
-          <TrendingUp size={8} />
-          <span className="font-inter">HOT</span>
-        </motion.div>
       )}
       
       {/* Header with Logo and Info - more compact */}
