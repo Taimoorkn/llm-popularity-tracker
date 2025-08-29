@@ -117,8 +117,7 @@ export default function Home() {
             Which LLM Rules in 2025?
           </h2>
           <p className="text-muted-foreground/80 max-w-xl mx-auto text-sm font-light font-inter leading-relaxed">
-            Cast your vote for the AI models you love. Real-time updates powered by Supabase.
-            Every vote instantly updates for all users worldwide!
+            By the people. For the people.
           </p>
         </motion.div>
         
@@ -233,10 +232,10 @@ export default function Home() {
       <footer className="border-t border-border/30 mt-12 py-6">
         <div className="container mx-auto px-4 text-center">
           <p className="text-muted-foreground/60 text-sm font-light font-inter">
-            Made with ❤️ by the AI Community | Real-time powered by Supabase
+            Made with ❤️ by the Community | Real-time scheduled intervals powered by Supabase
           </p>
           <p className="text-xs text-muted-foreground/40 mt-1.5 font-light font-inter">
-            Vote responsibly. All votes update instantly for everyone!
+            Vote responsibly. All votes update for everyone!
           </p>
         </div>
       </footer>

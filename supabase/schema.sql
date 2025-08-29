@@ -309,3 +309,17 @@ INSERT INTO llms (id, name, company, release_year) VALUES
 -- Initialize aggregates
 INSERT INTO vote_stats_aggregate (llm_id, total_votes, upvotes, downvotes, unique_voters)
 SELECT id, 0, 0, 0, 0 FROM llms;
+
+-- ============================================
+-- CRON JOB SETUP
+-- ============================================
+
+-- Enable pg_cron extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Schedule the aggregate update function to run every 5 seconds
+SELECT cron.schedule(
+  'update-vote-aggregates',
+  '*/10 * * * * *',
+  'SELECT update_all_aggregates();'
+);
